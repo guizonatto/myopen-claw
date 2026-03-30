@@ -200,3 +200,30 @@ python -m workflows.agent_example
 ```sh
 python -m workflows.cron_example
 ```
+
+---
+
+## Sincronização automática de skills via GitHub
+
+A partir de 2026-03, este repositório suporta sincronização automática das skills customizadas diretamente de um repositório GitHub, durante o start do container.
+
+**Como funciona:**
+- O script `entrypoint.sh` verifica se existe um repositório Git configurado em `/root/.openclaw/workspace/skills`.
+- Se existir, executa `git pull` para atualizar as skills.
+- Se não existir, executa `git clone` usando a URL definida na variável de ambiente `SKILLS_GIT_REPO`.
+- Isso garante que as skills estejam sempre atualizadas com o repositório remoto, sem sobrescrever skills já existentes.
+
+**Como configurar:**
+1. Defina a variável de ambiente `SKILLS_GIT_REPO` no seu `docker-compose.yml`:
+   ```yaml
+   environment:
+     - SKILLS_GIT_REPO=https://github.com/SEU_USUARIO/SEU_REPO_DE_SKILLS.git
+   ```
+2. O entrypoint irá sincronizar as skills automaticamente a cada start do container.
+
+**Vantagens:**
+- Permite atualizar/adicionar/remover skills apenas com um push no GitHub.
+- Facilita o deploy em múltiplos servidores sem rebuild manual da imagem.
+- Garante que o ambiente de skills esteja sempre consistente com o repositório remoto.
+
+Veja o script em `entrypoint.sh` para detalhes e customização.

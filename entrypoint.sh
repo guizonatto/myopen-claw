@@ -75,5 +75,14 @@ else
   git clone https://github.com/SEU_USUARIO/SEU_REPO_DE_SKILLS.git /root/.openclaw/workspace/skills
 fi
 
+# Upserta todas as skills da pasta sincronizada do GitHub
+for skill_dir in /root/.openclaw/workspace/skills/*/; do
+  if [ -f "$skill_dir/SKILL.md" ]; then
+    skill_name=$(basename "$skill_dir")
+    echo "Upsertando skill: $skill_name"
+    node dist/index.js skills upsert "$skill_dir" || echo "  ! Falha ao upsertar $skill_name"
+  fi
+done
+
 echo " >>> Subindo Gateway OpenClaw..."
 exec node dist/index.js gateway run
