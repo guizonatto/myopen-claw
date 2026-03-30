@@ -1,0 +1,16 @@
+# Dependências principais
+psycopg2-binary
+playwright
+requests
+apscheduler
+anthropic
+pytest
+pytest-mock
+pgvector
+mcp[stdio]
+sqlalchemy
+alembic
+fastapi
+uvicorn
+pydantic
+# Adicione aqui as dependências do seu projeto

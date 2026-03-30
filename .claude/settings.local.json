@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"from.*models import\\\\|import.*models\" C:/github/myopen-claw --include=*.py)",
+      "Bash(grep -r \"cur\\\\.execute\\\\|cursor\\\\.execute\" C:/github/myopen-claw --include=*.py)",
+      "Bash(xargs grep:*)"
+    ]
+  },
+  "description": "Overrides pessoais de permissões. Este arquivo é gitignored."
+}

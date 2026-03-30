@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "openclaw"
+version = "0.1.0"
+description = "Projeto OpenClaw para deploy replicável"
+authors = ["Guilherme Zonatto"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+psycopg2-binary = "*"
+playwright = "*"
+requests = "*"
+apscheduler = "*"
+anthropic = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

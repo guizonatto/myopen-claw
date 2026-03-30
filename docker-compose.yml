@@ -1,0 +1,136 @@
+services:
+  postgres:
+    image: ankane/pgvector
+    environment:
+      POSTGRES_DB: openclaw
+      POSTGRES_USER: openclaw
+      POSTGRES_PASSWORD: openclaw
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data      
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  openclaw-gateway:
+    build: .
+    container_name: openclaw-gateway
+    user: root      
+    restart: unless-stopped
+    ports:
+      - "18789:18789"
+    volumes:
+      # MUDANÇA: Apontando para o bash do root para persistir os dados
+      - openclaw-data:/root/.openclaw
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
+      - ./mcps:/app/mcps
+      - ./requirements.txt:/app/requirements.txt
+    environment:
+      - AUTH_CHOICE=${AUTH_CHOICE}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - GATEWAY_BIND=${GATEWAY_BIND}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ENABLE_SANDBOX=${ENABLE_SANDBOX}
+      - WEB_SEARCH_PROVIDER=${WEB_SEARCH_PROVIDER}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      - ENABLE_WHATSAPP=${ENABLE_WHATSAPP}
+      - MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
+      - MATRIX_USER_ID=${MATRIX_USER_ID}
+      - MATRIX_PASSWORD=${MATRIX_PASSWORD}
+      - NOSTR_PRIVATE_KEY=${NOSTR_PRIVATE_KEY}
+      - ENABLE_SIGNAL=${ENABLE_SIGNAL}
+      - ENABLE_IMESSAGE=${ENABLE_IMESSAGE}
+      - LINE_TOKEN=${LINE_TOKEN}
+      - ZALO_TOKEN=${ZALO_TOKEN}
+      - FEISHU_APP_ID=${FEISHU_APP_ID}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+      - AUTO_INSTALL_SKILLS=${AUTO_INSTALL_SKILLS}
+      - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - MCP_API_KEY=${MCP_API_KEY}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        exec /usr/local/bin/entrypoint.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mcp-crm:
+        condition: service_healthy
+      mcp-memories:
+        condition: service_healthy
+      mcp-shopping-tracker:
+        condition: service_healthy
+
+# MCPs rodam como containers separados. O OpenClaw os acessa via 'docker exec' (STDIO).
+  mcp-memories:
+    build:
+      context: ./mcps/memories_mcp
+      dockerfile: Dockerfile
+    image: mcp-memories:latest
+    container_name: mcp-memories
+    environment:
+      - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - MCP_API_KEY=${MCP_API_KEY}
+    volumes:
+      - ./mcp-memories-data:/mcp-memories
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  mcp-crm:
+    build:
+      context: ./mcps/crm_mcp
+      dockerfile: Dockerfile
+    image: mcp-crm:latest
+    container_name: mcp-crm
+    environment:
+      - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - MCP_API_KEY=${MCP_API_KEY}
+    volumes:
+      - ./mcp-crm-data:/mcp-crm
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  mcp-shopping-tracker:
+    build:
+      context: ./mcps/shopping_tracker_mcp
+      dockerfile: Dockerfile
+    image: mcp-shopping-tracker:latest
+    container_name: mcp-shopping-tracker
+    environment:
+      - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - MCP_API_KEY=${MCP_API_KEY}
+    volumes:
+      - ./mcp-shopping-tracker-data:/mcp-shopping-tracker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+volumes:
+  pgdata:
+  openclaw-data:

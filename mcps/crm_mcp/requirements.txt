@@ -1,0 +1,8 @@
+alembic
+sqlalchemy
+uvicorn
+fastapi
+pydantic
+psycopg2-binary
+pgvector
+mcp[stdio]

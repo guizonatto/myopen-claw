@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.openclaw.ai/schema.json",
+  "mcp": {
+    "servers": {
+      "mcp-crm": {
+        "command": "docker",
+        "args": ["exec", "-i", "mcp-crm", "python3", "/app/main.py"],
+        "type": "stdio"
+      },
+      "mcp-memories": {
+        "command": "docker",
+        "args": ["exec", "-i", "mcp-memories", "python3", "/app/main.py"],
+        "type": "stdio"
+      },
+      "mcp-shopping": {
+        "command": "docker",
+        "args": ["exec", "-i", "mcp-shopping-tracker", "python3", "/app/main.py"],
+        "type": "stdio"
+      },
+      "mcp-trends": {
+        "command": "docker",
+        "args": ["exec", "-i", "mcp-trends", "python3", "/app/main.py"],
+        "type": "stdio"
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789"
+      ]
+    },
+    "auth": {
+      "token": "senhaSecretaDoGuizo123"
+    }
+  }
+}

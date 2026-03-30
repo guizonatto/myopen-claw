@@ -1,0 +1,125 @@
+# Skill: CRM Contact Management
+# Descreve operações para criar, atualizar e consultar contatos via MCP-CRM
+
+name: crm_contact_management
+mcp: mcp-crm
+version: 1.0
+
+description: |
+  Manages data about acquaintances, clients, friends, and family. Allows creating, updating, and querying contacts using the MCP-CRM.
+
+inputs:
+  operation:
+    type: string
+    enum: [add_contact, search_contact]
+    description: Operation to perform (add or search contact)
+  full_name:
+    type: string
+    description: Full name of the contact
+  nickname:
+    type: string
+    description: Nickname (optional)
+  type:
+    type: string
+    enum: [client, friend, family, acquaintance]
+    description: Relationship type
+  birthday:
+    type: string
+    format: date
+    description: Birthday (YYYY-MM-DD)
+  phone:
+    type: string
+    description: Phone number
+  whatsapp:
+    type: string
+    description: WhatsApp number
+  examples:
+    - operation: add_contact
+      nome: "João Silva"
+      tipo: "cliente"
+      telefone: "(11) 99999-9999"
+      email: "joao@exemplo.com"
+      linkedin: "joaosilva"
+      notas: "Primeiro contato em 2026.03.29."
+      social_usernames:
+        - rede_social: "linkedin"
+          username: "joaosilva"
+        - rede_social: "instagram"
+          username: "joaosilva.ig"
+    - operation: search_contact
+      query: "João Silva empresa XPTO"
+  department:
+    type: string
+    description: Department
+  notes:
+    type: string
+    description: Notes or history
+  social_usernames:
+    type: array
+    items:
+      type: object
+      properties:
+        social_network:
+          type: string
+          description: Social network name (e.g., linkedin, instagram)
+        username:
+          type: string
+          description: Username on the social network
+    description: List of social network usernames
+  query:
+    type: string
+    description: Search text (name, company, email, etc)
+
+outputs:
+  status:
+    type: string
+    enum: [success, error]
+  contact_id:
+    type: string
+  data:
+    type: object
+  message:
+    type: string
+
+examples:
+  - operation: add_contact
+    full_name: "John Smith"
+    type: "client"
+    phone: "(11) 99999-9999"
+    email: "john@company.com"
+    notes: "2026-03-29: John posted on LinkedIn about his promotion to Sales Manager."
+    social_usernames:
+      - social_network: "linkedin"
+        username: "johnsmith"
+  - operation: search_contact
+    query: "John Smith Company XPTO"
+
+# ---
+# Example: End-to-end flow (user, agent, crawler, CRM)
+#
+# 1. User interaction:
+#    User: "Did anyone in my contacts get a new job or promotion recently?"
+#    Agent: "Let me check for recent updates on your contacts' social networks."
+#
+# 2. Agent triggers the autonomous crawler:
+#    - The crawler fetches recent posts from LinkedIn, Instagram, etc., for all known contacts (using their social_usernames).
+#    - Example post found: "2026-03-29: John Smith posted on LinkedIn: 'Excited to start as Sales Manager at Company XPTO!'"
+#
+# 3. Crawler sends the update to the agent:
+#    - Sends structured data: { full_name: "John Smith", social_network: "linkedin", username: "johnsmith", notes: "2026-03-29: John Smith posted on LinkedIn about new job at Company XPTO." }
+#
+# 4. Agent processes the update:
+#    - Uses the CRM skill (crm_contact_management) with operation: add_contact or update_contact (if contact exists)
+#    - Example payload:
+#      operation: add_contact
+#      full_name: "John Smith"
+#      notes: "2026-03-29: John Smith posted on LinkedIn about new job at Company XPTO."
+#      social_usernames:
+#        - social_network: "linkedin"
+#          username: "johnsmith"
+#
+# 5. CRM MCP receives the request and saves/updates the contact in the database.
+#
+# 6. Agent confirms to the user: "Update saved: John Smith started a new job at Company XPTO."
+#
+# This flow ensures autonomous crawling, structured update, and atomic CRM registration.

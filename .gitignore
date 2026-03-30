@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.pot
+*.mo
+*.env
+.venv
+venv
+ENV/
+.env/
+.venv/
+venv/
+
+# Poetry
+# NÃO ignorar poetry.lock — necessário para build Docker reproduzível
+
+# VSCode
+.vscode/
+
+# Docker
+*.tar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testes
+htmlcov/
+.coverage
+.tox/
+.nox/
+.pytest_cache/
+
+# CI/CD
+.github/
+
+# Outros
+*.bak
+*.swp
+*.tmp

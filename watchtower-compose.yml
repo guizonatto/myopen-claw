@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  openclaw:
+    image: seu-usuario/openclaw:latest
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/openclaw
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: openclaw
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 60
+
+volumes:
+  pgdata:

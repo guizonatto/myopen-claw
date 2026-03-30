@@ -1,0 +1,52 @@
+# shopping_tracker.yaml
+
+name: shopping_tracker
+version: 0.1.0
+description: |
+  Skill for shopping list tracking. Receives user input about purchased items, parses products, saves to the shopping MCP database, maintains a wish list, tracks purchase periodicity, and notifies when an item will likely need to be bought again. The MCP learns from user habits.
+inputs:
+  - name: user_purchases
+    type: string
+    description: "List of purchased items provided by the user (e.g.: 2x milk, 1 bread, 1kg rice)"
+mcp:
+  name: shopping_tracker_mcp
+  endpoint: http://shopping_tracker_mcp:8000
+outputs:
+  - name: normalized_items
+    type: list
+    description: List of extracted and normalized items, including price, store, brand, and package_volume
+  - name: purchase_periodicity
+    type: list
+    description: Purchase periodicity tracking per item
+  - name: purchase_notification
+    type: string
+    description: Notification message about items to be purchased soon
+examples:
+  - input: "3x milk, 2 whole wheat bread, 1kg rice"
+    output:
+      normalized_items:
+        - name: milk
+          quantity: 3
+          price: 7.99
+          store: Central Store
+          brand: Italac
+          package_volume: 1L
+        - name: whole wheat bread
+          quantity: 2
+          price: 8.50
+          store: Central Store
+          brand: Wickbold
+          package_volume: 500g
+        - name: rice
+          quantity: 1
+          unit: kg
+          price: 5.99
+          store: Central Store
+          brand: Tio João
+          package_volume: 1kg
+      purchase_periodicity:
+        - name: milk
+          avg_days: 7
+        - name: rice
+          avg_days: 30
+      purchase_notification: "You should buy milk in 5 days."
