@@ -66,13 +66,17 @@ if [ ! -f "$CONFIG_DIR/openclaw.json" ]; then
   node dist/index.js gateway restart
 fi
 
-# Sincroniza/atualiza skills do GitHub (upsert)
-if [ -d "/root/.openclaw/workspace/skills/.git" ]; then
+# Sincroniza/atualiza skills do GitHub (upsert robusto)
+SKILLS_DIR="/root/.openclaw/workspace/skills"
+if [ -d "$SKILLS_DIR/.git" ]; then
   echo "Atualizando skills do GitHub..."
-  cd /root/.openclaw/workspace/skills && git pull
+  cd "$SKILLS_DIR" && git pull
 else
-  echo "Clonando skills do GitHub..."
-  git clone https://github.com/SEU_USUARIO/SEU_REPO_DE_SKILLS.git /root/.openclaw/workspace/skills
+  echo "Inicializando repositório de skills do GitHub..."
+  cd "$SKILLS_DIR"
+  git init
+  git remote add origin "$SKILLS_GIT_REPO"
+  git pull origin main  # ou o branch correto
 fi
 
 # Upserta todas as skills da pasta sincronizada do GitHub
