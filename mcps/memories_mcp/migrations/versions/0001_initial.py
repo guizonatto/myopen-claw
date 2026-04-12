@@ -17,8 +17,8 @@ def upgrade():
     op.create_table(
         'memories',
         sa.Column('id', pg.UUID(as_uuid=True), primary_key=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.Column('contato_id', pg.UUID(as_uuid=True), nullable=True),
         sa.Column('entidade', sa.Text(), nullable=True),
         sa.Column('tipo', sa.Text(), nullable=False, server_default='semantica'),

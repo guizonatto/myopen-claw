@@ -6,7 +6,9 @@ alwaysApply: true
 # Regra para Versionamento e Deploy de Schema em MCPs (Model Context Protocol)
 
 ## Padrão obrigatório
-- Toda alteração de schema (criação, alteração, remoção de tabelas/campos) de domínio deve ser feita via SQLAlchemy + Alembic dentro do respectivo MCP.
+- Toda alteração de schema (criação, alteração, remoção de tabelas/campos, tipos, defaults, constraints ou dados estruturais) de domínio deve ser feita via migration Alembic dentro do respectivo MCP, seguindo o padrão dos docs canônicos do projeto.
+	- Sempre que alterar dados de banco de dados ou colunas, crie uma migration atômica e clara.
+	- Se não houver doc canônico para o padrão de migration, crie um doc em `docs/` descrevendo o padrão adotado.
 - Cada MCP deve manter sua pasta de migrations (ex: mcp/memories_mcp/migrations/), versionando cada mudança de schema.
 - Cada MCP deve usar um banco de dados isolado (ou, no mínimo, schema isolado) e sua própria tabela alembic_version, garantindo versionamento e deploy totalmente independentes dos demais MCPs.
 - O deploy do MCP deve rodar automaticamente as migrations Alembic ao subir o container (ex: via entrypoint.sh ou comando no Dockerfile).

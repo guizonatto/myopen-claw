@@ -1,0 +1,1 @@
+openclaw cron add --name "Lead Fetch and Enrich" --cron "*/30 * * * *" --tz "America/Sao_Paulo" --session isolated --message "Executa o script de enriquecimento de leads." --announce --channel discord --to "channel:${DISCORD_CHANNEL_ID}"

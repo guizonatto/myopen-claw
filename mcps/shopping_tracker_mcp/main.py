@@ -1,8 +1,45 @@
-from fastapi import FastAPI, HTTPException
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from api.endpoints import router
 from db.models import engine, get_session, Compra, Wishlist
-from typing import List
+from typing import List, AsyncGenerator
+import json
+
+
+
+app = FastAPI(title="Shopping Tracker MCP")
+
+import json
+from fastapi import Request
+from fastapi.responses import StreamingResponse
+from typing import AsyncGenerator
+
+async def sse_event_generator(operation: str, params: dict) -> AsyncGenerator[str, None]:
+    import asyncio
+    try:
+        yield f"data: {json.dumps({'status': 'started', 'operation': operation})}\n\n"
+        for i in range(3):
+            await asyncio.sleep(1)
+            yield f"data: {json.dumps({'progress': (i+1)*33, 'msg': f'Etapa {i+1}/3', 'operation': operation})}\n\n"
+        # Resultado final (simples)
+        result = f"Operação {operation} executada com params {params}"
+        yield f"data: {json.dumps({'status': 'done', 'result': result})}\n\n"
+    except Exception as e:
+        yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
+
+@app.post("/sse")
+async def sse_shopping(request: Request):
+    body = await request.json()
+    operation = body.get("operation", "")
+    params = body.get("params", {})
+    async def event_stream():
+        async for event in sse_event_generator(operation, params):
+            if await request.is_disconnected():
+                break
+            yield event
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 app = FastAPI(title="Shopping Tracker MCP")
 
@@ -28,7 +65,7 @@ import sys
 import logging
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool
+from mcp.types import Tool, TextContent
 
 # Configuração de log para stderr
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)

@@ -1,0 +1,34 @@
+[
+  {
+    "nome": "João da Silva",
+    "apelido": "João Síndico",
+    "tipo": "sindico_profissional",
+    "aniversario": "1980-05-10",
+    "telefone": "+55 11 91234-5678",
+    "whatsapp": "+55 11 91234-5678",
+    "email": "joao@xyz.com",
+    "linkedin": "https://linkedin.com/in/joaosilva",
+    "instagram": "https://instagram.com/joaosilva",
+    "empresa": "Condomínios XYZ",
+    "cargo": "Síndico Profissional",
+    "setor": "Condomínios",
+    "notas": "Publicações: https://portalcondominio.com/artigo-joao, https://jornalcondominio.com/entrevista-joao",
+    "ativo": true
+  },
+  {
+    "nome": "Maria Souza",
+    "apelido": null,
+    "tipo": "sindico_profissional",
+    "aniversario": null,
+    "telefone": "+55 21 99876-5432",
+    "whatsapp": null,
+    "email": null,
+    "linkedin": null,
+    "instagram": null,
+    "empresa": null,
+    "cargo": null,
+    "setor": null,
+    "notas": null,
+    "ativo": true
+  }
+]

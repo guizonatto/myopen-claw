@@ -30,6 +30,35 @@ POST /execute
 }
 ```
 
+## Endpoint SSE HTTP (Streaming)
+
+Cada MCP deve expor um endpoint HTTP para streaming de respostas via Server-Sent Events (SSE), seguindo o padrão:
+
+POST /sse
+```json
+{
+  "operation": "fetch_trending_topics",
+  "params": {"region": "BR", "limit": 10}
+}
+```
+
+**Resposta (SSE):**
+```
+data: {"status": "started", "operation": "fetch_trending_topics"}
+
+data: {"progress": 33, "msg": "Etapa 1/3", "operation": "fetch_trending_topics"}
+
+data: {"progress": 66, "msg": "Etapa 2/3", "operation": "fetch_trending_topics"}
+
+data: {"progress": 99, "msg": "Etapa 3/3", "operation": "fetch_trending_topics"}
+
+data: {"status": "done", "result": "...resultado final..."}
+```
+
+- O endpoint deve usar `media_type: text/event-stream`.
+- O cliente pode cancelar a conexão a qualquer momento.
+- O fluxo de eventos pode ser customizado conforme a operação.
+
 ## Referências
 - docs/architecture.md
 - docs/atomic_rules.md

@@ -21,8 +21,8 @@ def upgrade():
     op.create_table(
         'contatos',
         sa.Column('id', pg.UUID(as_uuid=True), primary_key=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.Column('nome', sa.Text(), nullable=False),
         sa.Column('apelido', sa.Text(), nullable=True),
         sa.Column('tipo', sa.Text(), nullable=True),
@@ -55,7 +55,7 @@ def upgrade():
     op.create_table(
         'contato_relacionamentos',
         sa.Column('id', pg.UUID(as_uuid=True), primary_key=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
         sa.Column('contato_id', pg.UUID(as_uuid=True), sa.ForeignKey(f'{SCHEMA}.contatos.id', ondelete='CASCADE'), nullable=False),
         sa.Column('relacionado_id', pg.UUID(as_uuid=True), sa.ForeignKey(f'{SCHEMA}.contatos.id', ondelete='CASCADE'), nullable=False),
         sa.Column('tipo', sa.Text(), nullable=False),

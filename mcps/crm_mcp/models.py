@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, Text, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import func
 from sqlalchemy import MetaData
@@ -29,6 +29,11 @@ class Contato(Base):
     empresa = Column(Text, nullable=True)
     cargo = Column(Text, nullable=True)
     setor = Column(Text, nullable=True)
+    cnpj = Column(Text, nullable=True)
+    cnaes = Column(ARRAY(Text), nullable=True)
+    pipeline_status = Column(Text, nullable=True)
+    stage = Column(Text, nullable=True)
+    icp_type = Column(Text, nullable=True)
     notas = Column(Text, nullable=True)
     ativo = Column(Boolean, server_default='true')
     ultimo_contato = Column(DateTime(timezone=True), nullable=True)

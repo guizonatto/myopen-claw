@@ -15,12 +15,13 @@ Quando for acionado para rodar esta skill, siga rigorosamente as etapas abaixo u
 Ordene o navegador a acessar a aba de tendências globais:
 * **action**: `goto`
 * **url**: `https://x.com/explore/tabs/trending`
+USE X_BEARER_TOKEN se disponível para autenticação via header e evitar bloqueios. Se não tiver, siga para a etapa 2 para lidar com o login.
 
 ### 2. Tratamento de Login e Cookies do X (MUITO IMPORTANTE)
 O X bloqueia bots e visualizações anônimas. Pare para analisar a página via DOM ou `screenshot`.
 Se a captura tela ou o HTML revelar que fomos redirecionados para uma tela de "Login / Entrar":
 * **Pare a execução.**
-* Peça gentilmente ao usuário o seu cookie de autenticação ("auth_token").
+* Peça gentilmente ao usuário o seu cookie de autenticação ("X_BEARER_TOKEN") se não estiver disponível.
 * Ensine o usuário a pegar esse dado passo-a-passo:
   > *"Preciso do seu cookie de acesso. Abra o X/Twitter no seu navegador real (Chrome/Edge), aperte F12 para abrir o modo desenvolvedor, e vá na aba 'Application' (Aplicativo). Na barra lateral esquerda procure por Cookies > https://x.com. Procure na tabela o nome `auth_token`, copie o valor dele e cole aqui no chat pra mim!"*
 * Quando o usuário te dar o valor, grave nas suas Memórias com a ferramenta `memory_save` (ou oriente que ele ponha num `.env` se for rodar script Bash).

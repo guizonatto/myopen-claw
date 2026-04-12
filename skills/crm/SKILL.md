@@ -11,7 +11,6 @@ Skill para criar, atualizar e consultar dados sobre conhecidos, clientes, amigos
 - Suporta atualizações incrementais e histórico de interações.
 - Invoca o MCP-CRM para persistência e consulta dos dados.
 
-## Identificação de Contatos
 
 - O campo `social_username` (username em redes sociais como LinkedIn, Instagram, Facebook, Twitter, TikTok) é uma entrada válida para identificar contatos.
 - Não é necessário saber o `contact_id` do banco para registrar ou atualizar informações.

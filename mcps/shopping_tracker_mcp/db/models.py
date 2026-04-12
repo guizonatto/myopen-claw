@@ -39,7 +39,7 @@ class Compra(Base):
     wishlist = Column(Boolean, default=False)
     ultima_compra = Column(Date, nullable=True)
     preco = Column(Float, nullable=True)
-    supermercado = Column(String, nullable=True)
+    loja = Column(String, nullable=True)
     marca = Column(String, nullable=True)
     volume_embalagem = Column(String, nullable=True)
 

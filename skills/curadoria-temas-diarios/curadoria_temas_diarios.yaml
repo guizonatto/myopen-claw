@@ -1,0 +1,64 @@
+name: curadoria_temas_diarios
+version: 0.1.0
+description: Curadoria diária dos principais temas e notícias, com agendamento para 09h.
+author: openclaw
+
+tags:
+  - curadoria
+  - noticias
+  - diario
+  - cronjob
+
+input_schema:
+  type: object
+  properties:
+    temas:
+      type: array
+      items:
+        type: string
+      description: Lista de temas para curadoria (opcional, usa padrão se não informado)
+    fontes:
+      type: array
+      items:
+        type: string
+      description: Lista de fontes para buscar notícias (opcional)
+  required: []
+
+output_schema:
+  type: array
+  items:
+    type: object
+    properties:
+      tema:
+        type: string
+      noticias:
+        type: array
+        items:
+          type: object
+          properties:
+            titulo:
+              type: string
+            fonte:
+              type: string
+            link:
+              type: string
+            resumo:
+              type: string
+          required:
+            - titulo
+            - fonte
+            - link
+            - resumo
+    required:
+      - tema
+      - noticias
+
+run:
+  pipe:
+    - browser:
+        query: "{{ tema }} principais notícias"
+        fontes: "{{ fontes | default('padrão') }}"
+    - curate_news:
+        input: "{{ browser.results }}"
+    - output:
+        result: "{{ curate_news.curation }}"

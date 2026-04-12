@@ -1,0 +1,1 @@
+openclaw cron add --name "github_weekly_summary" --cron "0 15 * * 4" --tz "America/Sao_Paulo" --session isolated --message "Gera e publica resumo semanal de releases do GitHub/Jira. Exporta para Notion e envia para Discord." --announce --channel discord --to "channel:${DISCORD_CHANNEL_ID}"

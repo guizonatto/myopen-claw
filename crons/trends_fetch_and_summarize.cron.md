@@ -1,0 +1,1 @@
+openclaw cron add --name "fetch_trends_brazil" --cron "8 20 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Execute a skill fetch-trending-topics: buscar trending topics do Twitter Brasil e salvar no MCP trends_mcp." --announce --channel telegram --to "${TELEGRAM_USER_ID}"

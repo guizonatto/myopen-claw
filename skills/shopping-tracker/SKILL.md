@@ -1,6 +1,9 @@
 ---
 name: shopping-tracker
 description: "Skill para tracking de lista de compras. Recebe input do usuário sobre itens comprados, destrincha os produtos, salva no banco do MCP de compras, mantém wish list, faz tracking de periodicidade de compra e avisa quando é provável que precise comprar novamente. O MCP aprende com os hábitos do usuário."
+metadata:
+	openclaw:
+		model: anthropic/haiku
 ---
 ## Skill: Shopping Tracker
 

@@ -35,5 +35,22 @@
     "auth": {
       "token": "senhaSecretaDoGuizo123"
     }
+  },
+  "browser": {
+    "enabled": true
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "logging": {
+    "level": "debug"
   }
 }

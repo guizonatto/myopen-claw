@@ -1,0 +1,1 @@
+openclaw cron add --name "fetch_politics_economy_news" --cron "10 6 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Execute a skill politics_economy_monitor: buscar notícias de política e economia e gerar resumo." --announce --channel telegram --to "${TELEGRAM_USER_ID}"

@@ -1,0 +1,83 @@
+# Michelin Weekly Meal Plan Skill Definition
+name: weekly_michelin_meal_plan
+description: >
+  Generates a Michelin-level weekly meal plan (lunch for 1, dinner for 2) using local, seasonal ingredients. Prioritizes perishable ingredients, adapts to user preferences, and outputs a grocery list.
+parameters:
+  type: object
+  properties:
+    user_preferences:
+      type: object
+      description: User ingredient preferences and dislikes
+      properties:
+        avoid_ingredients:
+          type: array
+          items:
+            type: string
+          description: Ingredients to avoid (e.g., allergies, dislikes)
+        preferred_cuisines:
+          type: array
+          items:
+            type: string
+          description: Preferred cuisines or styles (optional)
+    local_ingredients:
+      type: array
+      items:
+        type: string
+      description: List of available local/seasonal ingredients
+    nutritionist_approval:
+      type: boolean
+      description: Ensure meals are balanced and nutritionist-approved
+      default: true
+    week_start:
+      type: string
+      format: date
+      description: Start date for the meal plan (YYYY-MM-DD)
+  required:
+    - user_preferences
+    - local_ingredients
+output:
+  type: object
+  properties:
+    meal_plan:
+      type: array
+      description: List of meals for the week
+      items:
+        type: object
+        properties:
+          day:
+            type: string
+          meal:
+            type: string
+            enum: [lunch, dinner]
+          recipe_name:
+            type: string
+          ingredients:
+            type: array
+            items:
+              type: string
+          prep_time_minutes:
+            type: integer
+          perishability_notes:
+            type: string
+    grocery_list:
+      type: array
+      description: Grocery list for the week
+      items:
+        type: object
+        properties:
+          category:
+            type: string
+          item:
+            type: string
+          quantity:
+            type: string
+    notes:
+      type: string
+      description: Additional notes (perishability, substitutions, nutrition)
+examples:
+  - user_preferences:
+      avoid_ingredients: [eggplant]
+      preferred_cuisines: [French, Italian]
+    local_ingredients: [beetroot, goat cheese, white fish, tomato, greens, walnuts, cilantro, lime]
+    nutritionist_approval: true
+    week_start: 2026-04-06

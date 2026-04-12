@@ -8,17 +8,67 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data      
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-evolution-db.sh:/docker-entrypoint-initdb.d/init-evolution-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U openclaw"]
       interval: 10s
       timeout: 5s
       retries: 5
+    env_file:
+      - .env
+
+  # ---------------------------------------------------------------------------
+  # Redis — required by evolution-api
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: openclaw-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Evolution API — WhatsApp bridge (conecta ao openclaw via webhook)
+  # ---------------------------------------------------------------------------
+
+  
+  evolution-api:
+    build:
+      context: ../evolution-api
+      dockerfile: Dockerfile
+    container_name: openclaw-evolution-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - evolution.env
+    volumes:
+      - evolution-instances:/evolution/instances
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/').then(r=>process.exit(r.ok||r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      start_period: 40s
+      retries: 5
+
   openclaw-gateway:
     build: .
+    image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-gateway
-    user: root      
-    restart: unless-stopped
+    user: root
+    # Não use restart/systemd: gateway é iniciado via entrypoint.sh
     ports:
       - "18789:18789"
     volumes:
@@ -28,33 +78,40 @@ services:
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
       - ./mcps:/app/mcps
       - ./requirements.txt:/app/requirements.txt
+      - ./plugins:/app/plugins:ro
     environment:
-      - AUTH_CHOICE=${AUTH_CHOICE}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - GATEWAY_BIND=${GATEWAY_BIND}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - ENABLE_SANDBOX=${ENABLE_SANDBOX}
-      - WEB_SEARCH_PROVIDER=${WEB_SEARCH_PROVIDER}
-      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
-      - ENABLE_WHATSAPP=${ENABLE_WHATSAPP}
-      - MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
-      - MATRIX_USER_ID=${MATRIX_USER_ID}
-      - MATRIX_PASSWORD=${MATRIX_PASSWORD}
-      - NOSTR_PRIVATE_KEY=${NOSTR_PRIVATE_KEY}
-      - ENABLE_SIGNAL=${ENABLE_SIGNAL}
-      - ENABLE_IMESSAGE=${ENABLE_IMESSAGE}
-      - LINE_TOKEN=${LINE_TOKEN}
-      - ZALO_TOKEN=${ZALO_TOKEN}
-      - FEISHU_APP_ID=${FEISHU_APP_ID}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
-      - AUTO_INSTALL_SKILLS=${AUTO_INSTALL_SKILLS}
+      # - AUTH_CHOICE=${AUTH_CHOICE}
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}      
+      # - ZAI_API_KEY=${ZAI_API_KEY}
+      # - OPENAI_CODEX=${OPENAI_CODEX}
+      # - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      # - GATEWAY_BIND=${GATEWAY_BIND}
+      # - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # - ENABLE_SANDBOX=${ENABLE_SANDBOX}
+      # - WEB_SEARCH_PROVIDER=${WEB_SEARCH_PROVIDER}
+      # - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      # - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      # - TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
+      # - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      # - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      # - DISCORD_ZIND_CONTENT_CHANNEL_ID=${DISCORD_ZIND_CONTENT_CHANNEL_ID}
+      # - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      # - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      # - ENABLE_WHATSAPP=${ENABLE_WHATSAPP}
+      # - MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
+      # - MATRIX_USER_ID=${MATRIX_USER_ID}
+      # - MATRIX_PASSWORD=${MATRIX_PASSWORD}
+      # - NOSTR_PRIVATE_KEY=${NOSTR_PRIVATE_KEY}
+      # - ENABLE_SIGNAL=${ENABLE_SIGNAL}
+      # - ENABLE_IMESSAGE=${ENABLE_IMESSAGE}
+      # - LINE_TOKEN=${LINE_TOKEN}
+      # - ZALO_TOKEN=${ZALO_TOKEN}
+      # - FEISHU_APP_ID=${FEISHU_APP_ID}
+      # - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+      # - AUTO_INSTALL_SKILLS=${AUTO_INSTALL_SKILLS}
+      # - MCP_API_KEY=${MCP_API_KEY}
+      # - SKILLS_GIT_REPO=${SKILLS_GIT_REPO}
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
-      - MCP_API_KEY=${MCP_API_KEY}
     entrypoint:
       - /bin/sh
       - -c
@@ -69,6 +126,10 @@ services:
         condition: service_healthy
       mcp-shopping-tracker:
         condition: service_healthy
+      evolution-api:
+        condition: service_healthy
+    env_file:
+      - .env
 
 # MCPs rodam como containers separados. O OpenClaw os acessa via 'docker exec' (STDIO).
   mcp-memories:
@@ -81,6 +142,7 @@ services:
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
       - MCP_API_KEY=${MCP_API_KEY}
     volumes:
+      - ./mcps/memories_mcp:/app
       - ./mcp-memories-data:/mcp-memories
     depends_on:
       postgres:
@@ -91,6 +153,38 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+
+  mcp-trends:
+    build:
+      context: ./mcps/trends_mcp
+      dockerfile: Dockerfile
+    image: mcp-trends:latest
+    container_name: mcp-trends
+    environment:
+      - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - MCP_API_KEY=${MCP_API_KEY}
+    volumes:
+      - ./mcps/trends_mcp:/app
+      - ./mcp-trends-data:/mcp-trends
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
   mcp-crm:
     build:
       context: ./mcps/crm_mcp
@@ -101,6 +195,7 @@ services:
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
       - MCP_API_KEY=${MCP_API_KEY}
     volumes:
+      - ./mcps/crm_mcp:/app
       - ./mcp-crm-data:/mcp-crm
     depends_on:
       postgres:
@@ -111,6 +206,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
   mcp-shopping-tracker:
     build:
       context: ./mcps/shopping_tracker_mcp
@@ -121,6 +221,7 @@ services:
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
       - MCP_API_KEY=${MCP_API_KEY}
     volumes:
+      - ./mcps/shopping_tracker_mcp:/app
       - ./mcp-shopping-tracker-data:/mcp-shopping-tracker
     depends_on:
       postgres:
@@ -131,6 +232,34 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env
+
+  # ---------------------------------------------------------------------------
+  # Auto-updater — atualiza código e banco de dados diariamente às 3h
+  # Não requer nenhuma ação manual. Só funciona se o repositório estiver no servidor.
+  # ---------------------------------------------------------------------------
+  auto-updater:
+    build:
+      context: ./scripts/updater
+      dockerfile: Dockerfile
+    container_name: openclaw-auto-updater
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/repo
+    depends_on:
+      - mcp-crm
+      - mcp-memories
+      - mcp-trends
+      - mcp-shopping-tracker
+      - openclaw-gateway
+
 volumes:
   pgdata:
   openclaw-data:
+  redis-data:
+  evolution-instances:

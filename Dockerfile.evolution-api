@@ -1,0 +1,34 @@
+FROM node:20
+
+# Instala dependências do sistema necessárias para build de pacotes nativos e Prisma
+RUN apt-get update && apt-get install -y git python3 build-essential
+
+# Clona o repositório da branch main
+RUN git clone --branch main https://github.com/EvolutionAPI/evolution-api.git /app
+
+WORKDIR /app
+
+
+# Copia o arquivo de variáveis de ambiente (ajuste o nome se necessário)
+COPY evolution.env .env
+
+
+# Define variável obrigatória para o build do Prisma (ajuste para mysql se for o seu caso)
+ENV DATABASE_PROVIDER=postgresql
+
+# Instala dependências Node.js
+
+RUN npm install --legacy-peer-deps
+
+# Gera Prisma Client (necessário para Evolution API)
+RUN npm run db:generate
+
+# Executa migrations automaticamente
+RUN npx prisma migrate deploy || true
+
+# Builda o projeto
+RUN npm run build
+
+EXPOSE 8080
+
+CMD ["npm", "run", "start:prod"]

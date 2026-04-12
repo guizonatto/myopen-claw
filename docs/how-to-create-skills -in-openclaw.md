@@ -1,3 +1,9 @@
+keep this doc update once in a week: 
+sources:
+https://docs.openclaw.ai/tools/skills
+https://docs.openclaw.ai/tools/skills-config
+https://docs.openclaw.ai/tools/creating-skills
+last update: 23/02/2026
 
 # 🛠️ How to Create Skills in OpenClaw
 

@@ -115,6 +115,19 @@ Se você procura o OpenClaw original, acesse: https://docs.openclaw.ai/
 
 Sempre que instalar dependências, plugins ou comandos que precisem rodar no deploy, registre a entrada correspondente no arquivo `entrypoint.sh`. Isso garante que tudo será automatizado e reprodutível em qualquer ambiente, sem necessidade de setup manual após o deploy.
 
+## Instalação e deploy
+
+Depois de configurar o `.env` e subir o stack com Docker, o `entrypoint.sh` executa automaticamente o bootstrap do ambiente.
+
+No start do container, o fluxo de instalação/deploy faz:
+- onboarding inicial do OpenClaw quando necessário
+- sincronização das skills a partir de `SKILLS_GIT_REPO`
+- subida do gateway OpenClaw
+- espera ativa até o gateway ficar disponível
+- registro automático de todos os cronjobs versionados em `crons/*.cron.md`
+
+Isso evita cadastro manual de jobs e garante que um novo deploy recrie os cronjobs declarados no repositório.
+
 ## OpenProse: instalação e uso
 
 O OpenProse é um plugin oficial do OpenClaw para workflows markdown-first, pesquisa multi-agente e automação paralela.
@@ -227,3 +240,9 @@ A partir de 2026-03, este repositório suporta sincronização automática das s
 - Garante que o ambiente de skills esteja sempre consistente com o repositório remoto.
 
 Veja o script em `entrypoint.sh` para detalhes e customização.
+
+## ATUALIZAÇÃO IMPORTANTE (2026-04-10)
+As tools do MCP de memórias de longo prazo foram renomeadas para evitar conflito com o memory builtin do OpenClaw:
+- save_memory → save_memory_long
+- get_memory → get_memory_long
+Atualize suas skills, pipes e integrações para usar os novos nomes ao persistir ou buscar memórias longas.

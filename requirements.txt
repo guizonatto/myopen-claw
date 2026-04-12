@@ -1,3 +1,5 @@
+requests
+python-dotenv
 # Dependências principais
 psycopg2-binary
 playwright
@@ -7,10 +9,12 @@ anthropic
 pytest
 pytest-mock
 pgvector
-mcp[stdio]
 sqlalchemy
 alembic
 fastapi
 uvicorn
 pydantic
+atlassian-python-api
+mcp
+qdrant-client
 # Adicione aqui as dependências do seu projeto

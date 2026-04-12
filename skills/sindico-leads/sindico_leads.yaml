@@ -1,0 +1,56 @@
+name: sindico_leads
+version: 0.1.0
+description: Busca e cadastra leads de síndicos profissionais na web.
+author: openclaw
+
+tags:
+  - leads
+  - sindico
+  - scraping
+  - crm
+
+input_schema:
+  type: object
+  properties:
+    search_terms:
+      type: array
+      items:
+        type: string
+      description: Lista de termos de busca para encontrar síndicos profissionais.
+    max_results:
+      type: integer
+      description: Número máximo de leads a retornar.
+      default: 50
+  required:
+    - search_terms
+
+output_schema:
+  type: array
+  items:
+    type: object
+    properties:
+      nome:
+        type: string
+      empresa:
+        type: string
+        nullable: true
+      celular:
+        type: string
+    required:
+      - nome
+      - celular
+
+run:
+  pipe:
+    - browser:
+        query: "{{ search_terms | join(', ') }} síndico profissional telefone celular"
+        max_results: "{{ max_results }}"
+    - extract_leads:
+        input: "{{ browser.results }}"
+    - deduplicate_leads:
+        input: "{{ extract_leads.leads }}"
+    - add_lead_crm:
+        leads: "{{ deduplicate_leads.leads }}"
+        tipo: "lead"
+    - output:
+        result: "{{ add_lead_crm.leads }}"
