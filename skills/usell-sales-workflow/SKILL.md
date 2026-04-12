@@ -193,6 +193,7 @@ Prompts das 3 camadas: [security-prompts.md](references/security-prompts.md)
 | [crm-integration.md](references/crm-integration.md) | Payloads CRM, campos |
 | [tools.md](references/tools.md) | MCP-CRM ops + Evolution API + delay formula |
 | [OBJECTIONS.md](references/OBJECTIONS.md) | Sempre — antes de responder qualquer objeção |
+| [PLANOS_PRECOS.md](references/PLANOS_PRECOS.md) | Perguntas sobre preço, planos, comparação de planos, objeção de preço |
 | [security-prompts.md](references/security-prompts.md) | Prompts Gatekeeper / Vendas / Auditor |
 
 ---

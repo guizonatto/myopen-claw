@@ -42,7 +42,8 @@
   "channels": {
     "whatsapp": {
       "enabled": true,
-      "dmPolicy": "pairing",
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
       "groups": {
         "*": {
           "requireMention": true
@@ -50,6 +51,41 @@
       }
     }
   },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "agents": {
+    "list": [
+      {
+        "id": "default",
+        "default": true,
+        "workspace": "~/.openclaw/workspace"
+      },
+      {
+        "id": "usell",
+        "name": "Usell Sales",
+        "workspace": "~/.openclaw/workspace",
+        "tools": {
+          "profile": "messaging"
+        }
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "agentId": "default",
+      "match": {
+        "channel": "whatsapp",
+        "peer": { "kind": "direct", "id": "5541999159953" }
+      }
+    },
+    {
+      "agentId": "usell",
+      "match": {
+        "channel": "whatsapp"
+      }
+    }
+  ],
   "logging": {
     "level": "debug"
   }
