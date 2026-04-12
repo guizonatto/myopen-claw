@@ -101,6 +101,20 @@ Body:
 }
 ```
 
+### Configuração obrigatória da instância
+
+Para que o bot receba mensagens de qualquer número (incluindo prospects desconhecidos):
+
+```
+PUT {EVOLUTION_URL}/settings/set/{EVOLUTION_INSTANCE}
+Headers: apikey: {EVOLUTION_API_KEY}
+
+Body:
+{ "dmPolicy": "public" }
+```
+
+> Configurar uma vez após conectar a instância. Sem isso, apenas contatos salvos na agenda conseguem enviar mensagem ao bot.
+
 ### Regras de uso
 - Sempre encapsular o número com DDI: `55` + DDD + número (ex: `5511999990000`)
 - Nunca enviar mais de 1 mensagem por vez sem delay entre elas

@@ -122,6 +122,14 @@ POST /message/sendText/{instance}
 | POST | `/instance/restart/{instance}` | Reinicia instância |
 | POST | `/instance/logout/{instance}` | Desconecta instância |
 | PUT | `/instance/presence/{instance}` | Define presença (online/offline) |
+| PUT | `/settings/set/{instance}` | Configura settings da instância (dmPolicy, etc) |
+
+**Configuração obrigatória para bot de vendas (receber msgs de desconhecidos):**
+```json
+PUT /settings/set/{instance}
+{ "dmPolicy": "public" }
+```
+> Sem isso, o bot só recebe mensagens de contatos salvos na agenda.
 
 #### Perfil
 
