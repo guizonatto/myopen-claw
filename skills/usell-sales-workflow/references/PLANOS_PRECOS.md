@@ -45,13 +45,3 @@ A Usell é uma infraestrutura de receita para quem vende via WhatsApp. O objetiv
 - **Gatilho:** "Conecte a Usell ao seu ERP ou CRM e tome decisões baseadas em dados de retenção e comportamento de compra."
 
 ---
-
-## 4. Gestão de Objeções
-
-### "Achei caro comparado a bots de R$ 99"
-"Bots de R$ 99 apenas disparam mensagens. A Usell é um sistema de gestão de leilões, estoque e pagamentos. Se um bot falhar em uma única venda de R$ 500, ele já custou mais caro que a nossa mensalidade."
-
-### "Não preciso de API no momento"
-"O plano Escala não é apenas API. Ele oferece relatórios de BI que mostram quem são seus melhores compradores e sua taxa de retenção. Isso permite que você venda mais para quem já conhece sua marca."
-
----
