@@ -18,6 +18,7 @@ O agente verifica este arquivo antes de qualquer objeção. Se encontrar match (
 **Técnica:** Reframe ROI
 **Resposta validada:**
 > "Entendo, João! Mas pensa comigo: se a Usell te salvar aquelas horinhas de conferência que a gente calculou, sobra tempo para o café com a família ou para vender mais. É sobre ganhar tempo, entende?"
+"Bots de R$ 99 apenas disparam mensagens. A Usell é um sistema de gestão de leilões, estoque e pagamentos. Se um bot falhar em uma única venda de R$ 500, ele já custou mais caro que a nossa mensalidade."
 **Plano sugerido:** Comunidade R$499 — mostrar que se paga em [X] vendas
 
 ---

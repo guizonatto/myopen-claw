@@ -47,6 +47,7 @@ Envia mensagens via REST. Variáveis de ambiente necessárias:
 - `EVOLUTION_URL` — ex: `http://evolution:8080`
 - `EVOLUTION_INSTANCE` — nome da instância conectada
 - `EVOLUTION_API_KEY` — token de autenticação
+- `USELL_WHATSAPP_PHONE` — número de telefone da instância Usell (`554163470650`)
 
 ### Enviar mensagem de texto com simulação de digitação
 
