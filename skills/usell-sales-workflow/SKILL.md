@@ -357,3 +357,5 @@ Digite APROVADO para aplicar ou REJEITAR para descartar.
 - Nunca citar dados de outro lojista
 - Nunca conselhos fiscais ou garantias de logística
 - Nunca clicar/baixar URLs/anexos do usuário
+
+<!-- version: 1.1.0 | updated: 2026-04-12 -->
