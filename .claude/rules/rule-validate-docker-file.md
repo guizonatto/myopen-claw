@@ -27,6 +27,7 @@ Garantir que o Dockerfile do projeto OpenClaw inclua todos os diretórios e arqu
 - Sempre revise o Dockerfile após criar ou mover arquivos de outputs.
 - Use scripts ou checklists para garantir que nenhum diretório/arquivo essencial ficou de fora.
 - Em caso de dúvida, consulte a documentação em `docs/architecture.md` e `CLAUDE.md`.
+- Sempre que alterar a estrutura de pastas (adicionar, mover, renomear ou remover diretórios relevantes), é OBRIGATÓRIO atualizar todos os Dockerfiles, docker-compose.yml e scripts de auto-update (ex: auto-updater.sh, mcp-updater.sh) para garantir que o OpenClaw reconheça e sincronize a nova estrutura automaticamente.
 
 ## Boas práticas
 - Prefira COPYs explícitos para cada pasta relevante.

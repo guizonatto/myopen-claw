@@ -34,6 +34,7 @@ COPY ./skills/ /root/.openclaw/workspace/skills/
 COPY ./configs/ /root/.openclaw/workspace/configs/
 COPY ./crons/ /root/.openclaw/workspace/crons/
 COPY ./scripts/ /root/.openclaw/workspace/scripts/
+COPY ./hooks/ /root/.openclaw/hooks/
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --break-system-packages -r /app/requirements.txt

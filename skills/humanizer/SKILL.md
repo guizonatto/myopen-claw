@@ -58,7 +58,7 @@ Disparado toda segunda-feira às 06:00 com o prompt: `humanizer self-update`.
    cd ~/.openclaw/workspace
    git add skills/humanizer/references/ai-patterns.md
    git commit -m "feat(humanizer): sync ai-patterns from Wikipedia — $(date +%Y-%m-%d)"
-   git push origin main
+   git push https://${GITHUB_TOKEN}@github.com/${GITHUB_ORG}/${GITHUB_REPO}.git main
    ```
 
 4. Se não houver mudanças: encerrar silenciosamente.

@@ -305,7 +305,7 @@ O agente monitora o thread do Discord (via heartbeat ou trigger Discord).
 cd ~/.openclaw/workspace
 git add skills/usell-sales-workflow/references/OBJECTIONS.md
 git commit -m "feat(objections): add OBJ-{N} — {título_curto}"
-git push origin main
+git push https://${GITHUB_TOKEN}@github.com/${GITHUB_ORG}/${GITHUB_REPO}.git main
 ```
 
 Confirmar no canal Discord: "✅ OBJ-{N} documentada e publicada no repositório."
@@ -441,7 +441,7 @@ O agente monitora as mensagens recebidas do número do owner (via heartbeat ou t
 cd ~/.openclaw/workspace
 git add skills/usell-sales-workflow/references/{arquivo_atualizado}
 git commit -m "feat(knowledge): add validated answer — {resumo_curto}"
-git push origin main
+git push https://${GITHUB_TOKEN}@github.com/${GITHUB_ORG}/${GITHUB_REPO}.git main
 ```
 
 6. Confirmar ao owner via WhatsApp:

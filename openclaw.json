@@ -88,5 +88,13 @@
   ],
   "logging": {
     "level": "debug"
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "github-push": { "enabled": true }
+      }
+    }
   }
 }
