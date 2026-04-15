@@ -1,0 +1,37 @@
+FROM python:3.12-slim AS fetcher
+WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl tar ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://github.com/abhi1693/openclaw-mission-control/archive/refs/heads/master.tar.gz \
+  | tar -xz --strip-components=1
+
+FROM python:3.12-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl ca-certificates git \
+  && rm -rf /var/lib/apt/lists/*
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+FROM base AS deps
+COPY --from=fetcher /app/backend/pyproject.toml /app/backend/uv.lock ./
+RUN uv sync --frozen --no-dev
+
+FROM base AS runtime
+RUN groupadd --system appgroup && useradd --system --gid appgroup --create-home appuser \
+  && chown appuser:appgroup /app
+COPY --from=deps --chown=appuser:appgroup /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
+COPY --from=fetcher --chown=appuser:appgroup /app/backend/migrations ./migrations
+COPY --from=fetcher --chown=appuser:appgroup /app/backend/alembic.ini ./alembic.ini
+COPY --from=fetcher --chown=appuser:appgroup /app/backend/app ./app
+COPY --from=fetcher --chown=appuser:appgroup /app/backend/templates ./templates
+COPY --from=fetcher --chown=appuser:appgroup /app/scripts ./scripts
+COPY --chown=appuser:appgroup entrypoint-backend.sh ./entrypoint-backend.sh
+RUN chmod +x ./entrypoint-backend.sh
+USER appuser
+EXPOSE 8000
+CMD ["/bin/bash", "./entrypoint-backend.sh"]

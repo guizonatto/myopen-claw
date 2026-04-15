@@ -5,6 +5,36 @@ Atualizar sempre que uma nova integração for adicionada.
 
 ---
 
+## Obsidian Vault
+
+Vault montado em `/vault` (host: `C:\Vault\Pessoal`). Acesso via obsidian MCP.
+
+> Todos os CLIs `obsidian-cli` disponíveis são REST API clients (requerem Obsidian app + plugin). Use obsidian MCP para acesso direto.
+
+### obsidian MCP (navegação + leitura/escrita + busca)
+
+MCP `obsidian` registrado em `openclaw.json` via `npx obsidian-mcp /vault`.
+Não requer Obsidian app rodando — acessa arquivos diretamente.
+
+| Operação | Tool |
+|---|---|
+| Listar notas | `list_notes` |
+| Ler nota | `read_note "Folder/Note"` |
+| Criar/escrever nota | `create_note` / `edit_note` |
+| Buscar por conteúdo | `search_notes "query"` |
+| Gerenciar tags | `add_tag` / `remove_tag` |
+| Mover nota | `move_note` |
+
+### Estrutura do vault
+
+| Pasta | Conteúdo |
+|---|---|
+| `/vault/4000-Inbox/` | Notas novas a processar (monitorado a cada 5min) |
+| `/vault/2000-Knowledge/` | Base de conhecimento indexada no RAG (reindexada às 3h) |
+| `/vault/3000-Agents/Librarian_SOP.md` | SOP do agente Librarian |
+
+---
+
 ## MCPs (Model Context Protocol)
 
 Acessados via `docker exec` STDIO pelo gateway. Registrados em `openclaw.json`.
@@ -12,9 +42,9 @@ Acessados via `docker exec` STDIO pelo gateway. Registrados em `openclaw.json`.
 | MCP | Container | Porta HTTP | O que faz |
 |---|---|---|---|
 | `mcp-crm` | `mcp-crm` | 8001 | CRM de contatos: add, search, update, follow-up |
-| `mcp-memories` | `mcp-memories` | 8002 | Memórias e relacionamentos pessoais |
 | `mcp-trends` | `mcp-trends` | 8000 | Trends de mercado (Twitter, LinkedIn, Google) |
 | `mcp-shopping-tracker` | `mcp-shopping-tracker` | 8003 | Rastreamento de listas de compras |
+| `obsidian` | `openclaw-gateway` (npx) | — | Vault Obsidian: read, write, search, tags |
 
 ### Operações disponíveis — mcp-crm
 

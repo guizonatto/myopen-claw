@@ -17,7 +17,7 @@ services:
       retries: 5
     env_file:
       - .env
-
+    restart: unless-stopped
   # ---------------------------------------------------------------------------
   # Redis — required by evolution-api
   # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ services:
       redis:
         condition: service_healthy
       postgres:
-        condition: service_healthy
+        condition: service_healthy    
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:8080/').then(r=>process.exit(r.ok||r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -64,7 +64,6 @@ services:
       retries: 5
 
   openclaw-gateway:
-    build: .
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-gateway
     user: root
@@ -72,13 +71,20 @@ services:
     ports:
       - "18789:18789"
     volumes:
-      # MUDANÇA: Apontando para o bash do root para persistir os dados
       - openclaw-data:/root/.openclaw
       - /var/run/docker.sock:/var/run/docker.sock
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
+      - ./openclaw.json:/opt/openclaw-bootstrap/openclaw.json
+      - ./skills:/opt/openclaw-bootstrap/workspace/skills
+      - ./configs:/opt/openclaw-bootstrap/workspace/configs
+      - ./crons:/opt/openclaw-bootstrap/workspace/crons
+      - ./scripts:/opt/openclaw-bootstrap/workspace/scripts
+      - ./hooks:/opt/openclaw-bootstrap/hooks
+      - ./memclaw-memclaw-0.9.39.tgz:/opt/openclaw-bootstrap/memclaw.tgz
       - ./mcps:/app/mcps
       - ./requirements.txt:/app/requirements.txt
       - ./plugins:/app/plugins:ro
+      - C:/Vault/Pessoal:/vault
     environment:
       # - AUTH_CHOICE=${AUTH_CHOICE}
       # - OPENAI_API_KEY=${OPENAI_API_KEY}      
@@ -112,53 +118,39 @@ services:
       # - MCP_API_KEY=${MCP_API_KEY}
       # - SKILLS_GIT_REPO=${SKILLS_GIT_REPO}
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - CORTEX_MEM_URL=http://cortex-mem:8085
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - NVIDIA_MODEL=${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4}
     entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        exec /usr/local/bin/entrypoint.sh
+      - /bin/bash
+      - /usr/local/bin/entrypoint.sh
     depends_on:
       postgres:
         condition: service_healthy
       mcp-crm:
         condition: service_healthy
-      mcp-memories:
-        condition: service_healthy
       mcp-shopping-tracker:
         condition: service_healthy
       evolution-api:
         condition: service_healthy
+      cortex-mem:
+        condition: service_healthy
     env_file:
       - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:18789/healthz >/dev/null"]
+      interval: 30s
+      timeout: 30s
+      start_period: 90s
+      retries: 5
 
 # MCPs rodam como containers separados. O OpenClaw os acessa via 'docker exec' (STDIO).
-  mcp-memories:
-    build:
-      context: ./mcps/memories_mcp
-      dockerfile: Dockerfile
-    image: mcp-memories:latest
-    container_name: mcp-memories
-    environment:
-      - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
-      - MCP_API_KEY=${MCP_API_KEY}
-    volumes:
-      - ./mcps/memories_mcp:/app
-      - ./mcp-memories-data:/mcp-memories
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-    ports:
-      - "8002:8002"
-    env_file:
-      - .env
-
   mcp-trends:
     build:
       context: ./mcps/trends_mcp
@@ -180,7 +172,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
@@ -206,7 +198,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-
+    restart: unless-stopped
     ports:
       - "8001:8001"
     env_file:
@@ -232,7 +224,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-
+    restart: unless-stopped
     ports:
       - "8003:8003"
     env_file:
@@ -253,13 +245,73 @@ services:
       - .:/repo
     depends_on:
       - mcp-crm
-      - mcp-memories
       - mcp-trends
       - mcp-shopping-tracker
       - openclaw-gateway
+    
+  # ---------------------------------------------------------------------------
+  # Qdrant — Vector Database for Cortex-Mem
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - .env
+    
+  # ---------------------------------------------------------------------------
+  # Cortex-Mem — Long-term Memory Service
+  # ---------------------------------------------------------------------------
+  cortex-mem:
+    build:
+      context: .
+      dockerfile: docker/cortex-mem/Dockerfile
+    container_name: cortex-mem
+    restart: unless-stopped
+    environment:
+      - QDRANT_URL=http://qdrant:6334
+      - QDRANT_COLLECTION=cortex_memories
+      - EMBEDDING_DIM=1024
+      - LLM_API_KEY=ollama
+      - LLM_API_BASE_URL=http://host.docker.internal:11434/v1
+      - LLM_MODEL=${OLLAMA_MODEL:-gemma4}
+      - EMBEDDING_API_KEY=ollama
+      - EMBEDDING_API_BASE_URL=http://host.docker.internal:11434/v1
+      - EMBEDDING_MODEL_NAME=qwen3-embedding:0.6b
+      - EMBEDDING_MODEL=qwen3-embedding:0.6b
+    ports:
+      - "8085:8085"
+    volumes:
+      - cortex-mem-data:/var/lib/cortex-mem
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    # Intencionalmente sem `env_file: .env` para evitar herdar `DATABASE_URL`
+    # e outras variaveis nao relacionadas ao cortex-mem.
 
 volumes:
   pgdata:
   openclaw-data:
   redis-data:
   evolution-instances:
+  qdrant-data:
+  cortex-mem-data:
+  mcp-trends-data:
+  mcp-crm-data:
+  mcp-shopping-tracker-data:

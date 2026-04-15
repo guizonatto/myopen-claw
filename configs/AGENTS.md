@@ -52,6 +52,35 @@ When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
 When you make a mistake → document it so future-you doesn’t repeat it
 Text > Brain 📝
 
+## 📚 Obsidian Vault — Quando e como usar
+
+O vault está montado em `/vault`. Use o MCP `obsidian` para todas as operações.
+
+> Todos os CLIs `obsidian-cli` disponíveis são REST API clients — requerem Obsidian app. Use obsidian MCP.
+
+### Quando consultar o vault
+- Perguntas sobre projetos pessoais ou decisões passadas → `search_notes "query"` via MCP obsidian
+- Quando o usuário pedir para "lembrar" algo que não é contato CRM → salvar no vault
+- Ao processar inbox (`/vault/4000-Inbox/`) → `read_note "3000-Agents/Librarian_SOP"` primeiro
+
+### Quando escrever no vault
+- Decisão importante → `create_note "2000-Knowledge/<título>"` via MCP obsidian
+- Resumo/conversa → `create_note "4000-Inbox/<título>"` para o Librarian processar
+- Aprendizado duradouro → vault é mais permanente que cortex-mem
+
+### Hierarquia de memória (qual usar quando)
+
+| Situação | Onde salvar |
+|---|---|
+| Fato sobre um contato (cliente, amigo) | `mcp-crm` → `add_memory` |
+| Conhecimento pessoal / notas de vida | `/vault/2000-Knowledge/` via MCP obsidian |
+| Nota bruta para processar depois | `/vault/4000-Inbox/` via MCP obsidian |
+| Memória semântica buscável por IA | cortex-mem (via memclaw plugin) |
+| Regra ou aprendizado do sistema | `AGENTS.md` ou `TOOLS.md` |
+
+### Segurança
+- Vault só disponível na sessão principal (direct chat). Nunca expor conteúdo do vault em grupos ou canais públicos.
+
 Red Lines
 Don’t exfiltrate private data. Ever.
 Don’t run destructive commands without asking.

@@ -1,5 +1,21 @@
 # MEMORY.md — Sistema de Memória e Relacionamentos do OpenClaw
 
+## Mapa de memória — qual camada usar
+
+| O que guardar | Onde | Como |
+|---|---|---|
+| Contato (cliente, amigo, familiar) | `mcp-crm` | `add_contact`, `add_memory` |
+| Nota pessoal / conhecimento bruto | Vault `/vault/2000-Knowledge/` | `obsidian-cli create` |
+| Nota para processar / inbox | Vault `/vault/4000-Inbox/` | `obsidian-cli create` |
+| Memória semântica buscável por IA | cortex-mem (memclaw plugin) | via memória automática |
+| Regra ou aprendizado do agente | `AGENTS.md` / `TOOLS.md` | editar arquivo |
+
+**Vault = fonte primária de conhecimento pessoal.**
+**cortex-mem = índice vetorial do vault (reindexado às 3h).**
+**mcp-crm/memories = dados estruturados relacionais (CRM).**
+
+---
+
 Implementado em `openclaw/memory_db.py`. Backend: PostgreSQL + pgvector.
 
 ## Modelo de três camadas

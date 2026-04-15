@@ -7,3 +7,4 @@ psycopg2-binary
 pgvector
 mcp[stdio]
 qdrant-client
+httpx

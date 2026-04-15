@@ -22,7 +22,7 @@ class Memory(Base):
     tipo = Column(Text, nullable=False, server_default='semantica')
     categoria = Column(Text, nullable=True)
     conteudo = Column(Text, nullable=False)
-    embedding = Column(Vector(1536), nullable=True)
+    embedding = Column(Vector(2560), nullable=True)
     importancia = Column(SmallInteger, server_default='3')
     validade = Column(DateTime(timezone=True), nullable=True)
     recorrencia = Column(Text, nullable=True)

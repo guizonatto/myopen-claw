@@ -1,0 +1,35 @@
+FROM node:20-alpine AS fetcher
+WORKDIR /app
+RUN apk add --no-cache curl tar
+RUN curl -fsSL https://github.com/abhi1693/openclaw-mission-control/archive/refs/heads/master.tar.gz \
+  | tar -xz --strip-components=1
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY --from=fetcher /app/frontend/package.json /app/frontend/package-lock.json ./
+RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=fetcher /app/frontend .
+ARG NEXT_PUBLIC_API_URL=auto
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ARG NEXT_PUBLIC_AUTH_MODE=local
+ENV NEXT_PUBLIC_AUTH_MODE=${NEXT_PUBLIC_AUTH_MODE}
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_PUBLIC_API_URL=auto \
+    NEXT_PUBLIC_AUTH_MODE=local
+RUN addgroup -S appgroup && adduser -S -G appgroup appuser \
+  && chown appuser:appgroup /app
+COPY --from=builder --chown=appuser:appgroup /app/.next ./.next
+COPY --from=builder --chown=appuser:appgroup /app/package.json ./package.json
+COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:appgroup /app/next.config.ts ./next.config.ts
+USER appuser
+EXPOSE 3000
+CMD ["npm", "run", "start"]

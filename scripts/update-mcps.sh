@@ -12,8 +12,8 @@ echo "[$(date)] === update-mcps start ==="
 # 1. Puxa código novo
 git pull --ff-only origin main
 
-# 2. Roda migrations em cada MCP (sem restart — volumes montados, uvicorn --reload cuida do código)
-for container in mcp-crm mcp-memories mcp-trends mcp-shopping-tracker; do
+# 2. Roda migrations em cada MCP ativo (sem restart — volumes montados, uvicorn --reload cuida do código)
+for container in mcp-crm mcp-trends mcp-shopping-tracker; do
     echo "[$(date)] alembic upgrade head → $container"
     docker exec "$container" alembic upgrade head || echo "WARN: $container migration failed"
 done
@@ -21,7 +21,7 @@ done
 # 3. Se requirements.txt mudou no último pull, rebuild do MCP afetado
 CHANGED=$(git diff HEAD@{1} HEAD --name-only 2>/dev/null || true)
 
-for mcp in crm_mcp memories_mcp trends_mcp shopping_tracker_mcp; do
+for mcp in crm_mcp trends_mcp shopping_tracker_mcp; do
     if echo "$CHANGED" | grep -q "mcps/$mcp/requirements.txt"; then
         service=$(echo "$mcp" | sed 's/_mcp//' | sed 's/_/-/g')
         [ "$mcp" = "shopping_tracker_mcp" ] && service="shopping-tracker"

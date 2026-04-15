@@ -1,7 +1,25 @@
+import os
 from datetime import datetime, timezone
 from sqlalchemy import or_
+import httpx
 from db import get_session
 from models import Memory
+
+_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://locahost:11434")
+_EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "qwen3-embedding:4b")
+
+
+def _get_embedding(text: str) -> list[float] | None:
+    try:
+        r = httpx.post(
+            f"{_OLLAMA_URL}/api/embeddings",
+            json={"model": _EMBEDDING_MODEL, "prompt": text},
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()["embedding"]
+    except Exception:
+        return None
 
 TIPOS_VALIDOS = {"episodica", "semantica", "procedural", "follow_up"}
 RECORRENCIAS_VALIDAS = {None, "anual", "mensal", "semanal"}
@@ -27,6 +45,9 @@ def add_memory(
         raise ValueError(f"recorrencia inválida: {recorrencia!r}.")
     if recorrencia and (dia_mes is None or mes is None):
         raise ValueError("Memórias recorrentes exigem dia_mes e mes.")
+
+    if embedding is None:
+        embedding = _get_embedding(conteudo)
 
     with get_session() as session:
         memory = Memory(

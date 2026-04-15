@@ -9,8 +9,8 @@ echo "[$(date)] === auto-update start ==="
 cd /repo
 git pull --ff-only origin main && echo "[$(date)] git pull OK" || echo "[$(date)] WARN: git pull falhou (pode ser branch local)"
 
-# 2. Roda migrations de banco em cada MCP (sem restart, sem perda de dados)
-for container in mcp-crm mcp-memories mcp-trends mcp-shopping-tracker; do
+# 2. Roda migrations de banco em cada MCP ativo (sem restart, sem perda de dados)
+for container in mcp-crm mcp-trends mcp-shopping-tracker; do
     echo "[$(date)] alembic upgrade → $container"
     docker exec "$container" alembic upgrade head \
         && echo "[$(date)]   OK: $container" \
@@ -31,7 +31,6 @@ rebuild_if_needed() {
 }
 
 rebuild_if_needed "crm_mcp"             "mcp-crm"
-rebuild_if_needed "memories_mcp"        "mcp-memories"
 rebuild_if_needed "trends_mcp"          "mcp-trends"
 rebuild_if_needed "shopping_tracker_mcp" "mcp-shopping-tracker"
 

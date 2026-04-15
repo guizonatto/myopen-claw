@@ -7,11 +7,6 @@
         "args": ["exec", "-i", "mcp-crm", "python3", "/app/main.py"],
         "type": "stdio"
       },
-      "mcp-memories": {
-        "command": "docker",
-        "args": ["exec", "-i", "mcp-memories", "python3", "/app/main.py"],
-        "type": "stdio"
-      },
       "mcp-shopping": {
         "command": "docker",
         "args": ["exec", "-i", "mcp-shopping-tracker", "python3", "/app/main.py"],
@@ -21,6 +16,32 @@
         "command": "docker",
         "args": ["exec", "-i", "mcp-trends", "python3", "/app/main.py"],
         "type": "stdio"
+      },
+      "obsidian": {
+        "command": "npx",
+        "args": ["-y", "obsidian-mcp", "/vault"],
+        "type": "stdio"
+      }
+    }
+  },
+  "plugins": {
+    "slots": {
+      "memory": "memclaw"
+    },
+    "entries": {
+      "memclaw": {
+        "enabled": true,
+        "config": {
+          "serviceUrl": "${CORTEX_MEM_URL:-http://cortex-mem:8085}",
+          "tenantId": "tenant_claw",
+          "autoStartServices": false,
+          "llmApiBaseUrl": "${ZAI_API_BASE_URL:-https://api.z.ai/api/paas/v4}",
+          "llmApiKey": "${ZAI_API_KEY}",
+          "llmModel": "${ZAI_MODEL:-GLM-4.7}",
+          "embeddingApiBaseUrl": "http://host.docker.internal:11434/v1",
+          "embeddingApiKey": "ollama",
+          "embeddingModel": "${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
+        }
       }
     }
   },
@@ -54,7 +75,39 @@
   "session": {
     "dmScope": "per-channel-peer"
   },
+  "models": {
+    "providers": {
+      "nvidia": {
+        "apiKey": "${NVIDIA_API_KEY:-}",
+        "baseUrl": "https://integrate.api.nvidia.com/v1",
+        "api": "openai-completions",
+        "models": []
+      },
+      "openrouter": {
+        "apiKey": "${OPENROUTER_API_KEY:-}",
+        "baseUrl": "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}",
+        "api": "openai-completions"
+      },
+      "ollama": {
+        "apiKey": "ollama-local",
+        "baseUrl": "http://host.docker.internal:11434",
+        "api": "ollama"
+      }
+    }
+  },
   "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": false
+      },
+      "model": {
+        "primary": "nvidia/${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}",
+        "fallbacks": [
+          "openrouter/${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}",
+          "ollama/${OLLAMA_MODEL:-gemma4}"
+        ]
+      }
+    },
     "list": [
       {
         "id": "default",
@@ -68,6 +121,12 @@
         "tools": {
           "profile": "messaging"
         }
+      },
+      {
+        "id": "librarian",
+        "name": "Librarian",
+        "workspace": "/vault",
+        "systemPrompt": "You have access to the Obsidian vault at /vault via the obsidian MCP. On every session start, read /vault/3000-Agents/Librarian_SOP.md for your operating instructions. Check /vault/4000-Inbox for new .md files and process them per the SOP."
       }
     ]
   },

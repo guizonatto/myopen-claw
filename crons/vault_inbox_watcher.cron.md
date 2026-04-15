@@ -1,0 +1,1 @@
+openclaw cron add --name "vault-inbox-watcher" --cron "*/5 * * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --agent librarian --message "Check 4000-Inbox for new unprocessed .md files using the obsidian MCP. For each one, read its content, process it according to 3000-Agents/Librarian_SOP, then move it to the appropriate folder."
