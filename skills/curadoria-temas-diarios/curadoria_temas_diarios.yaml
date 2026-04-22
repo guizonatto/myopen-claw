@@ -54,11 +54,5 @@ output_schema:
       - noticias
 
 run:
-  pipe:
-    - web_search:
-        query: "{{ tema }} principais notícias"
-        fontes: "{{ fontes | default('padrão') }}"
-    - curate_news:
-        input: "{{ web_search.results }}"
-    - output:
-        result: "{{ curate_news.curation }}"
+  type: agent
+  instruction: "Siga as instruções do arquivo SKILL.md desta skill."
