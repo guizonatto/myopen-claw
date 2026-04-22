@@ -15,7 +15,7 @@
 |---|---|---|
 | Contato/lead (campos estruturados) | `mcp-crm` | `add_contact`, `update_contact` |
 | Nota/histórico de um contato (CRM) | `mcp-crm` | `update_contact` com `nota` (append com timestamp) |
-| Conhecimento pessoal durável | Vault `/vault/2000-Knowledge/` | MCP `obsidian`: `create_note` / `edit_note` / `move_note` |
+| Conhecimento pessoal durável | Vault `/vault/2000-Knowledge/` | MCP `obsidian`: via Librarian SOP |
 | Nota bruta para processar depois | Vault `/vault/4000-Inbox/` | MCP `obsidian`: `create_note` |
 | Memória semântica buscável (IA) | MemClaw (Cortex Memory) | `cortex_search`, `cortex_add_memory`, `cortex_commit_session` |
 | Regras/aprendizados do sistema | `configs/AGENTS.md` / `configs/TOOLS.md` | editar arquivo |
@@ -24,21 +24,29 @@
 
 ## MemClaw (Cortex Memory) — como usar
 
+### Fluxo correto (eficiente em tokens)
+
+```
+início da sessão  →  recall("contexto relevante")   # L0 apenas — ~200 tokens
+durante execução  →  remember(tipo, conteudo)        # buffer local, zero API calls
+fim da sessão     →  flush_memory()                  # 1 add_message por item + 1 commit
+                     (chamado automaticamente em BaseAgent.run())
+```
+
+**Nunca chame `add_message` dentro de loops ou a cada passo — use o buffer.**
+
 ### Recuperar (buscar contexto)
 
-- Use `cortex_search` primeiro (padrão `return_layers=["L0"]` é o mais barato em tokens).
-- Se precisar de mais detalhe, use `cortex_recall` (L0+L2) ou `cortex_search` com `return_layers=["L0","L1"]`.
+- Sempre começe com `return_layers=["L0"]` (abstrações — mais barato).
+- Se L0 não resolver, escale para `["L0", "L1"]` ou `["L0", "L1", "L2"]`.
 - Quando a busca não resolver, navegue com `cortex_ls` + `cortex_get_abstract`/`cortex_get_overview`/`cortex_get_content`.
 
-### Armazenar (explícito)
-
-- Use `cortex_add_memory` para registrar fatos/decisões/observações que precisam ser recuperáveis depois.
-  - Prefira um `session_id` **estável** para automações (ex: `agent-lead_fetcher`).
-  - Use `metadata` para tags/categoria/origem quando fizer sentido.
-- Use `cortex_commit_session` em checkpoints naturais (fim de um tópico, após uma decisão importante) para disparar extração/consolidação.
+### Armazenar
+- Via código Python: use `BaseAgent.remember()` → buffer → `flush_memory()` automático.
+- Via MCP (chat/manual): use `cortex_add_memory` + `cortex_commit_session` no fim do tópico.
+- `session_id` deve ser estável por agente (ex: `agent-lead_fetcher`) para acumular histórico.
 
 ### Onde fica (infra)
-
 - Serviço: `${CORTEX_MEM_URL:-http://cortex-mem:8085}` (porta 8085)
 - Persistência (Docker): volumes `qdrant-data` + `cortex-mem-data`
 
@@ -46,7 +54,7 @@
 
 ## Vault (Obsidian)
 
-- Vault em `/vault` — é um repositório git clonado de `https://github.com/guizonatto/obsidian`.
+- Vault em `/vault/` — é um repositório git clonado de `https://github.com/guizonatto/obsidian`.
 - **Git sync automático**: pull a cada 1h (`obsidian-git-pull`), push a cada 5min quando há mudanças (`obsidian-git-push`).
 - Acesso via MCP `obsidian` (configurado como `npx -y obsidian-mcp /vault`) para operações de conteúdo.
 - Para operações git diretas (ex: forçar pull/push fora do cron), use shell: `git -C /vault ...`.

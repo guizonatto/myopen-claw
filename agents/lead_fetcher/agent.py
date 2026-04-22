@@ -1,152 +1,144 @@
 """
-Agente para busca inteligente de leads em SP, com memória semântica (MemClaw/Cortex Memory)
-e foco em leads com WhatsApp.
+Agent: lead_fetcher
+Função: Busca leads em SP com WhatsApp, aprende quais fontes têm melhor taxa e prioriza nas próximas sessões.
+Usar quando: busca periódica de leads novos no CRM.
+
+ENV_VARS:
+  - CORTEX_MEM_URL: URL do serviço MemClaw (default: http://cortex-mem:8085)
+
+DB_TABLES:
+  - contatos: leitura+escrita
 """
+from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any
 
-# Dependências do domínio
 from mcps.crm_mcp.models import Contato
+from agents.base_agent import BaseAgent
+from skills.leads import fetch as leads_fetch
 
-from openclaw.cortex_mem import CortexMemClient, sanitize_session_id
 
-class LeadFetcherAgent:
+class LeadFetcherAgent(BaseAgent):
     """
-    Agente que busca, enriquece e registra leads no CRM, priorizando leads com WhatsApp e
-    registrando aprendizados como memória semântica no MemClaw.
+    Busca leads em SP com WhatsApp.
+    Aprende qual fonte tem melhor taxa_wpp e prioriza nas sessões seguintes.
     """
-    def __init__(
-        self,
-        crm_session,
-        *,
-        memclaw_client: CortexMemClient | None = None,
-        memclaw_session_id: str | None = None,
-    ):
+
+    name = "lead_fetcher"
+
+    def __init__(self, crm_session):
+        super().__init__()
         self.crm_session = crm_session
-        self.memclaw = memclaw_client or CortexMemClient()
-        self.memclaw_session_id = sanitize_session_id(memclaw_session_id or "agent-lead_fetcher")
 
-    def buscar_memorias(self) -> list[dict[str, Any]]:
-        """Busca memórias relevantes para estratégias e leads já processados (MemClaw)."""
-        scope = f"cortex://session/{self.memclaw_session_id}"
-        try:
-            return self.memclaw.search(
-                "lead estrategia whatsapp sao paulo",
-                scope=scope,
-                limit=20,
-                min_score=0.1,
-                return_layers=["L0"],
-            )
-        except Exception:
-            return []
+    # ── aprendizado de fontes ──────────────────────────────────────────────
 
-    def salvar_memoria(self, conteudo: str, categoria: str | None = None, origem: str | None = None) -> bool:
-        content_lines = [
-            "Entidade: lead",
-            "Tipo: estrategia",
-            f"Categoria: {categoria or '-'}",
-            f"Origem: {origem or '-'}",
-            "",
-            conteudo,
-        ]
-        try:
-            self.memclaw.add_message(
-                self.memclaw_session_id,
-                role="assistant",
-                content="\n".join(content_lines),
-                metadata={
-                    "entidade": "lead",
-                    "tipo": "estrategia",
-                    "categoria": categoria,
-                    "origem": origem,
-                },
-            )
-            return True
-        except Exception:
-            return False
-
-    def commit_memorias(self) -> None:
-        """Dispara extração/consolidação do MemClaw para a sessão do agente."""
-        try:
-            self.memclaw.commit_session(self.memclaw_session_id)
-        except Exception:
-            return
-
-    def buscar_leads(self) -> List[Dict[str, Any]]:
+    def _rankear_fontes(self) -> list[str]:
         """
-        Estratégia dinâmica: consulta memórias, seleciona fontes, busca e enriquece leads.
-        Foco em leads com WhatsApp.
+        Lê histórico de resultados no MemClaw e retorna fontes ordenadas por
+        taxa_wpp média (melhor primeiro). Fontes sem histórico entram no fim.
         """
-        # Exemplo: alternar entre estratégias salvas na memória
-        memorias = self.buscar_memorias()
-        # TODO: lógica para selecionar estratégia vencedora
-        # TODO: implementar busca real (Google, Instagram, LinkedIn, CNAE, etc.)
-        # Aqui retorna mock
-        return [
-            {
-                'nome': 'Empresa Exemplo',
-                'telefone': '+5511999999999',
-                'whatsapp': '+5511999999999',
-                'email': 'contato@exemplo.com',
-                'cidade': 'São Paulo',
-                'cnae': '6201-5/01',
-                'origem': 'mock_google',
-            }
-        ]
+        memorias = self.recall("resultado_fonte taxa whatsapp lead", limit=50, min_score=0.1)
 
-    def processar_leads(self):
-        """
-        Busca, enriquece e registra/atualiza leads no CRM, evitando duplicidade e salvando aprendizados.
-        """
+        acumulado: dict[str, list[float]] = defaultdict(list)
+        for m in memorias:
+            meta = m.get("metadata") or {}
+            fonte = meta.get("fonte")
+            taxa = meta.get("taxa_wpp")
+            if fonte and taxa is not None:
+                acumulado[fonte].append(float(taxa))
+
+        if not acumulado:
+            print(f"[{self.name}] sem histórico — usando ordem padrão.")
+            return list(leads_fetch.FONTES)
+
+        ranking = sorted(acumulado, key=lambda f: sum(acumulado[f]) / len(acumulado[f]), reverse=True)
+
+        # Fontes novas (sem histórico) entram no fim para exploração
+        for f in leads_fetch.FONTES:
+            if f not in ranking:
+                ranking.append(f)
+
+        medias = {f: f"{sum(acumulado[f])/len(acumulado[f]):.0%}" for f in acumulado}
+        print(f"[{self.name}] ranking fontes (taxa_wpp média): {medias}")
+        return ranking
+
+    def _salvar_resultado_fonte(self, fonte: str, total: int, com_wpp: int, duplicatas: int) -> None:
+        """Captura determinística — sempre salva métricas por fonte, sem julgamento."""
+        taxa = com_wpp / total if total > 0 else 0.0
+        self.remember(
+            "resultado_fonte",
+            f"fonte={fonte} total={total} whatsapp={com_wpp} duplicatas={duplicatas} taxa_wpp={taxa:.2f}",
+            fonte=fonte,
+            total=total,
+            com_wpp=com_wpp,
+            duplicatas=duplicatas,
+            taxa_wpp=taxa,
+        )
+
+    # ── busca e processamento ──────────────────────────────────────────────
+
+    def buscar_leads(self) -> list[dict[str, Any]]:
+        """Busca em todas as fontes na ordem aprendida, registrando métricas por fonte."""
+        todos: list[dict[str, Any]] = []
+
+        for fonte in self._rankear_fontes():
+            leads = leads_fetch.run(fonte)
+            com_wpp = sum(1 for l in leads if l.get("whatsapp"))
+            self._salvar_resultado_fonte(fonte, len(leads), com_wpp, duplicatas=0)
+            todos.extend(leads)
+            print(f"[{self.name}] {fonte}: {len(leads)} leads, {com_wpp} com WhatsApp")
+
+        return todos
+
+    def processar_leads(self) -> None:
+        """Registra leads novos no CRM, atualiza existentes, corrige contagem de duplicatas."""
         leads = self.buscar_leads()
-        commit_needed = False
+        duplicatas_por_fonte: dict[str, int] = defaultdict(int)
+
         for lead in leads:
-            # Verifica duplicidade
-            query = self.crm_session.query(Contato).filter(
-                Contato.nome == lead['nome'],
-                Contato.email == lead.get('email'),
-                Contato.telefone == lead.get('telefone'),
-            )
-            existente = query.first()
+            origem = lead.get("origem", "desconhecida")
+            existente = self.crm_session.query(Contato).filter(
+                Contato.nome == lead["nome"],
+                Contato.email == lead.get("email"),
+                Contato.telefone == lead.get("telefone"),
+            ).first()
+
             if existente:
-                # Atualiza se houver informação nova
+                duplicatas_por_fonte[origem] += 1
                 atualizado = False
-                for campo in ['whatsapp', 'cnae', 'origem']:
-                    if lead.get(campo) and getattr(existente, campo, None) != lead.get(campo):
-                        setattr(existente, campo, lead.get(campo))
+                for campo in ["whatsapp", "cnae", "origem"]:
+                    if lead.get(campo) and getattr(existente, campo, None) != lead[campo]:
+                        setattr(existente, campo, lead[campo])
                         atualizado = True
                 if atualizado:
                     existente.updated_at = datetime.utcnow()
                     self.crm_session.commit()
-                    commit_needed |= self.salvar_memoria(
-                        f"Lead atualizado: {lead['nome']} ({lead.get('email')})",
-                        categoria="atualizacao",
-                        origem=lead.get("origem"),
-                    )
+                    self.remember("lead_atualizado", f"Lead atualizado: {lead['nome']} via {origem}", origem=origem)
             else:
-                # Cria novo lead
-                novo = Contato(
-                    nome=lead['nome'],
-                    telefone=lead.get('telefone'),
-                    whatsapp=lead.get('whatsapp'),
-                    email=lead.get('email'),
-                    empresa=lead.get('empresa'),
-                    setor=lead.get('setor'),
-                    tipo='lead',
-                    notas=f"Origem: {lead.get('origem')} | CNAE: {lead.get('cnae')}",
-                )
-                self.crm_session.add(novo)
+                self.crm_session.add(Contato(
+                    nome=lead["nome"],
+                    telefone=lead.get("telefone"),
+                    whatsapp=lead.get("whatsapp"),
+                    email=lead.get("email"),
+                    empresa=lead.get("empresa"),
+                    setor=lead.get("setor"),
+                    tipo="lead",
+                    notas=f"Origem: {origem} | CNAE: {lead.get('cnae')}",
+                ))
                 self.crm_session.commit()
-                commit_needed |= self.salvar_memoria(
-                    f"Lead criado: {lead['nome']} ({lead.get('email')})",
-                    categoria="novo",
-                    origem=lead.get("origem"),
-                )
+                self.remember("lead_criado", f"Lead criado: {lead['nome']} via {origem}", origem=origem)
 
-        if commit_needed:
-            self.commit_memorias()
+        # Corrige métricas com contagem real de duplicatas
+        if duplicatas_por_fonte:
+            for fonte, n_dups in duplicatas_por_fonte.items():
+                leads_fonte = [l for l in leads if l.get("origem") == fonte]
+                com_wpp = sum(1 for l in leads_fonte if l.get("whatsapp"))
+                self._salvar_resultado_fonte(fonte, len(leads_fonte), com_wpp, n_dups)
+                print(f"[{self.name}] {fonte}: {n_dups} duplicata(s) detectada(s)")
 
-# Exemplo de uso (no cronjob):
-# from agents.lead_fetcher.agent import LeadFetcherAgent
-# agent = LeadFetcherAgent(crm_session, memclaw_session_id="agent-lead_fetcher")
-# agent.processar_leads()
+    def decide_and_run(self):
+        self.processar_leads()
+
+
+if __name__ == "__main__":
+    LeadFetcherAgent(crm_session=None).run()

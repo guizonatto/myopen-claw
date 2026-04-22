@@ -1,60 +1,25 @@
 name: sindico_leads
-version: 0.1.0
-description: Busca e cadastra leads de síndicos profissionais na web.
-author: openclaw
+description: >
+  Configuração de busca para síndicos profissionais.
+  Usado por skills/leads/fetch.py como fonte "sindico_leads".
 
-tags:
-  - leads
-  - sindico
-  - scraping
-  - crm
+search:
+  terms_default:
+    - "síndico profissional São Paulo"
+    - "síndico profissional SP telefone celular"
+    - "administradora condomínios SP síndico contato"
+  query_template: "{{ terms | join(' ') }} telefone celular whatsapp"
+  max_results: 50
 
-input_schema:
-  type: object
-  properties:
-    query:
-      type: string
-      description: Query de busca completa (opcional). Se omitida, será derivada de search_terms.
-    search_terms:
-      type: array
-      items:
-        type: string
-      description: Lista de termos de busca para encontrar síndicos profissionais (opcional).
-      default:
-        - "São Paulo"
-    max_results:
-      type: integer
-      description: Número máximo de leads a retornar.
-      default: 50
-  required: []
+mcp:
+  server: mcp-leads
+  operation: sindico_leads
 
 output_schema:
-  type: array
-  items:
-    type: object
-    properties:
-      nome:
-        type: string
-      empresa:
-        type: string
-        nullable: true
-      celular:
-        type: string
-    required:
-      - nome
-      - celular
+  fields: [nome, apelido, tipo, telefone, whatsapp, email, linkedin, instagram, empresa, cargo, setor, notas]
+  required: [nome]
+  tipo_crm: sindico_profissional
 
-run:
-  pipe:
-    - web_search:
-        query: "{{ query | default(((search_terms | default(['São Paulo'])) | join(' '))) }} síndico profissional telefone celular"
-        max_results: "{{ max_results | default(50) }}"
-    - extract_leads:
-        input: "{{ web_search.results }}"
-    - deduplicate_leads:
-        input: "{{ extract_leads.leads }}"
-    - add_lead_crm:
-        leads: "{{ deduplicate_leads.leads }}"
-        tipo: "lead"
-    - output:
-        result: "{{ add_lead_crm.leads }}"
+deduplication:
+  match_on: [nome, email, telefone]
+  on_conflict: update_new_fields

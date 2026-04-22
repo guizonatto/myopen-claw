@@ -1,0 +1,40 @@
+name: sindico_leads_fetch
+version: 0.2.0
+description: >
+  Busca síndicos profissionais via Tavily web_search + extração de contatos.
+  Retorna lista de leads com nome, telefone e WhatsApp normalizados.
+author: openclaw
+
+tags:
+  - leads
+  - sindico
+  - whatsapp
+  - crm
+
+input_schema:
+  type: object
+  properties:
+    fonte:
+      type: string
+      enum: [sindico_leads]
+      default: sindico_leads
+    cidade:
+      type: string
+      default: "São Paulo"
+    max_results:
+      type: integer
+      default: 20
+
+output_schema:
+  type: array
+  items:
+    type: object
+    properties:
+      nome:        { type: string }
+      telefone:    { type: string, nullable: true }
+      whatsapp:    { type: string, nullable: true }
+      email:       { type: string, nullable: true }
+      cidade:      { type: string }
+      cnae:        { type: string, nullable: true }
+      origem:      { type: string }
+    required: [nome, cidade, origem]

@@ -1,34 +1,52 @@
 ---
 name: sindico-leads
-description: "Buscar e enriquecer leads de síndicos profissionais e registrar no CRM (cheap-first)."
+description: "Busca leads por fonte, aprende taxa de WhatsApp por fonte e registra no CRM."
 metadata:
   openclaw:
     model: usage-router/mistral/mistral-medium-2508
 ---
 
-
-# SKILL: sindico-leads
+# SKILL: leads/fetch
 
 ## Objetivo
-Encontrar síndicos profissionais em fontes públicas na web, enriquecer com dados úteis e cadastrar/atualizar no CRM como `lead`, evitando duplicatas.
+Buscar leads empresariais por fonte, normalizar o output e retornar lista pronta para o CRM.
+Cada fonte tem sua config em `skills/leads/<fonte>.yaml`.
 
-## Estratégia (cheap-first)
-1. Chame a tool MCP `execute_lead_skill` do servidor `mcp-leads` com `operation="sindico_leads"`.
-2. Só faça `web_search`/`web_fetch` manual se o MCP estiver indisponível.
-3. `browser` só quando necessário (JS-heavy/login).
+## Fontes disponíveis
 
-## Mapeamento (CRM)
-- Identifique com alta confiança (nome + pelo menos 1 entre e-mail/telefone/username).
-- Cadastre novos leads; atualize campos novos em leads existentes.
-- Se houver divergência relevante (telefone/e-mail/empresa), registre como acontecimento/nota no CRM.
+| Fonte | Config | Estratégia |
+|---|---|---|
+| `sindico_leads` | `sindico_leads.yaml` | MCP `mcp-leads` → fallback web_search |
+| `google_maps` | — | Google Places API (`GOOGLE_MAPS_API_KEY`) |
+| `instagram_biz` | — | Instagram scraping (`INSTAGRAM_SESSION`) |
+| `linkedin_biz` | — | LinkedIn scraping (`LINKEDIN_SESSION`) |
+
+## Estratégia cheap-first (sindico_leads)
+1. Chamar MCP `mcp-leads` com `operation="sindico_leads"` — mais barato e rápido.
+2. Se MCP indisponível: `web_search` direto com query do `sindico_leads.yaml`.
+3. `browser` apenas quando necessário (sites JS-heavy ou com login).
+
+## Output normalizado
+Todos os campos abaixo são retornados por qualquer fonte:
+```
+nome | telefone | whatsapp | email | cidade | cnae | origem
+```
+Campos extras (sindico_leads): `apelido`, `tipo`, `linkedin`, `instagram`, `empresa`, `cargo`, `setor`, `notas`
+
+## Mapeamento CRM
+- Identificar por: nome + pelo menos 1 entre email/telefone.
+- Lead novo → `add_contact`.
+- Lead existente com campo novo → `update_contact`.
+- Divergência relevante (telefone/email diferente) → registrar como nota no CRM.
 
 ## Memória
-- Se descobrir fontes que funcionam bem, registre uma memória curta no MemClaw com as fontes e taxa de sucesso.
+- O agente que chama esta skill registra deterministicamente: `fonte`, `total`, `com_whatsapp`, `duplicatas`, `taxa_wpp`.
+- Não cabe à skill registrar memória — isso é responsabilidade do agente (`LeadFetcherAgent`).
 
-# User response
-- Responda apenas com contagens: novos, atualizados, divergências.
-- Não inclua PII (telefones/e-mails) nem lista de leads.
-- Se não encontrar leads: `Leads: 0 novos, 0 atualizados, 0 divergências`.
+## Resposta ao usuário
+Apenas contagens: `X novos, Y atualizados, Z divergências`.
+Não incluir PII (telefones, e-mails) na resposta.
 
 ## Referências
-- `skills/crm`
+- `skills/crm` — operações CRM
+- `agents/lead_fetcher/` — agente que usa esta skill e mantém o ranking de fontes
