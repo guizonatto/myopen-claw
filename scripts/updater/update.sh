@@ -33,6 +33,7 @@ rebuild_if_needed() {
 rebuild_if_needed "crm_mcp"             "mcp-crm"
 rebuild_if_needed "trends_mcp"          "mcp-trends"
 rebuild_if_needed "shopping_tracker_mcp" "mcp-shopping-tracker"
+rebuild_if_needed "leads_mcp"           "mcp-leads"
 
 # 4. Copia skills do repo principal direto para dentro do gateway
 # (não depende de SKILLS_GIT_REPO — usa o repo que já foi clonado no servidor)

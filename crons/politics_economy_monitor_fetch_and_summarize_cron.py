@@ -12,8 +12,8 @@ from fetch_and_summarize import run
 
 def main():
     scheduler = BlockingScheduler()
-    scheduler.add_job(run, 'cron', hour=6, minute=10, id='fetch_politics_economy_news')
-    print("Cronjob de política e economia agendado para rodar diariamente às 06h10.")
+    scheduler.add_job(run, 'cron', hour=7, minute=45, id='fetch_politics_economy_news')
+    print("Cronjob de política e economia agendado para rodar diariamente às 07h45.")
     scheduler.start()
 
 if __name__ == "__main__":

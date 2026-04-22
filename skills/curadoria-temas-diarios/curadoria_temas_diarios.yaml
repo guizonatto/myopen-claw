@@ -55,10 +55,10 @@ output_schema:
 
 run:
   pipe:
-    - browser:
+    - web_search:
         query: "{{ tema }} principais notícias"
         fontes: "{{ fontes | default('padrão') }}"
     - curate_news:
-        input: "{{ browser.results }}"
+        input: "{{ web_search.results }}"
     - output:
         result: "{{ curate_news.curation }}"

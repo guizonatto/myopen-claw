@@ -39,21 +39,69 @@ Não requer Obsidian app rodando — acessa arquivos diretamente.
 
 Acessados via `docker exec` STDIO pelo gateway. Registrados em `openclaw.json`.
 
-| MCP | Container | Porta HTTP | O que faz |
+## Tools nativas do Gateway
+
+| Tool | O que faz |
+|---|---|
+| `web_search` | Busca web via provider configurado (default: `duckduckgo`, pode ser `tavily`) |
+| `web_fetch` | Fetch simples de uma URL (sem browser) |
+| `browser` | Navegador automatizado (JS-heavy, logins, cliques) |
+
+> **Nomes de tools:** o nome que aparece aqui é o **nome exato** que o agente deve chamar (ex: `add_contact`, `sindico_leads`).
+
+| MCP (id no `openclaw.json`) | Container | Porta HTTP | O que faz |
 |---|---|---|---|
 | `mcp-crm` | `mcp-crm` | 8001 | CRM de contatos: add, search, update, follow-up |
-| `mcp-trends` | `mcp-trends` | 8000 | Trends de mercado (Twitter, LinkedIn, Google) |
-| `mcp-shopping-tracker` | `mcp-shopping-tracker` | 8003 | Rastreamento de listas de compras |
+| `mcp-leads` | `mcp-leads` | 8002 | Prospecção de leads (scraping) + upsert no CRM |
+| `mcp-trends` | `mcp-trends` | 8000 | Trends de mercado (armazenamento/consulta) |
+| `mcp-shopping` | `mcp-shopping-tracker` | 8003 | Rastreamento de listas de compras |
 | `obsidian` | `openclaw-gateway` (npx) | — | Vault Obsidian: read, write, search, tags |
+
+> Nota: o onboarding do OpenClaw também pode registrar aliases (`crm`, `shopping`, `trends`). Eles apontam para os mesmos containers, mas **prefira os ids `mcp-*`** para evitar ambiguidade.
 
 ### Operações disponíveis — mcp-crm
 
 | Tool | Campos obrigatórios | Campos opcionais |
 |---|---|---|
-| `add_contact` | `nome`, `email` | `whatsapp`, `cnpj`, `cnaes` |
+| `add_contact` | `nome` + (`email` \| `whatsapp` \| `telefone`) | `email`, `whatsapp`, `telefone`, `cnpj`, `cnaes` |
 | `search_contact` | `query` | — |
 | `update_contact` | `contact_id` | `pipeline_status`, `stage`, `icp_type`, `nota`, `whatsapp`, `empresa`, `cargo`, `tipo` |
 | `list_contacts_to_follow_up` | — | `hours_since_last_contact` (default 24), `limit` (default 10) |
+
+### Operações disponíveis — mcp-leads
+
+| Tool | Quando usar | Params |
+|---|---|---|
+| `sindico_leads` | Buscar e registrar leads de síndicos profissionais (sem PII no retorno) | `max_results` (default 20), `city` (default "São Paulo"), `query` (opcional) |
+| `execute_lead_skill` | Wrapper genérico (use apenas se precisar chamar outra `operation`) | `operation` + `params` |
+
+### Operações disponíveis — mcp-trends
+
+| Tool | O que faz | Params |
+|---|---|---|
+| `execute_trend_skill` | Wrapper do MCP trends | `operation` + `params` |
+
+Operações aceitas no `operation` (via `execute_trend_skill`):
+- `replace_trends` (`params.trends`: lista de strings)
+- `list_trends` (`params.limit`: int, default 100)
+- `ping` (`params`: `{}`)
+
+### Operações disponíveis — mcp-shopping
+
+| Tool | O que faz | Params |
+|---|---|---|
+| `registrar_compra` | Registra compras (e/ou wishlist) | `compras`: lista de itens |
+| `listar_wishlist` | Lista wishlist | — |
+
+---
+
+## Verificar registro no `openclaw.json`
+
+**Persistido (em runtime):** `/root/.openclaw/openclaw.json` dentro do container `openclaw-gateway`.
+
+Comandos úteis (PowerShell):
+- `docker exec -i openclaw-gateway sh -lc "node /app/dist/index.js mcp list"`
+- `docker exec -i openclaw-gateway sh -lc "python3 - <<'PY'\nimport json\nfrom pathlib import Path\ncfg=json.loads(Path('/root/.openclaw/openclaw.json').read_text('utf-8'))\nprint(sorted(cfg.get('mcp',{}).get('servers',{}).keys()))\nPY"`
 
 ---
 
@@ -205,10 +253,41 @@ PUT /settings/set/{instance}
 | `AUTO_INSTALL_SKILLS` | Gateway — skills instaladas no bootstrap |
 | `ENABLE_SANDBOX` | Gateway — modo sandbox |
 | `ENABLE_WHATSAPP` | Gateway — habilita canal WhatsApp Baileys |
-| `WEB_SEARCH_PROVIDER` | Gateway — provedor de busca web |
+| `GLOBAL_WEB_SEARCH_PROVIDER` | Gateway — provedor global de busca web (default recomendado: `duckduckgo`; fallback para `duckduckgo` se o provider exigir key e ela estiver vazia) |
+| `WEB_SEARCH_PROVIDER` | Gateway — compat/legado; usado apenas se `GLOBAL_WEB_SEARCH_PROVIDER` estiver vazio ou `duckduckgo` |
+| `TAVILY_API_KEY` | Skills de maior valor — Tavily para pesquisa focada |
+| `BRAVE_API_KEY` | Skills específicas — Brave Search overflow opcional |
+| `BRAVE_API_KEYS` | Skills específicas — rotação de chaves Brave |
 | `FIRECRAWL_API_KEY` | Gateway — scraping via Firecrawl |
 | `ZAI_API_KEY` | Gateway — provider z.ai |
 | `OPENAI_CODEX` | Gateway — provider OpenAI Codex |
+
+---
+
+## Política de Search/Browser por skill
+
+Ordem de custo/uso recomendada neste setup:
+
+1. `web_fetch` para URLs conhecidas e fontes fixas
+2. `web_search` global com `duckduckgo`
+3. `Tavily` apenas para pesquisa focada de maior valor
+4. `browser` apenas para sites JS-heavy, login-gated ou fluxos com clique
+
+### Mapeamento atual
+
+| Skill | Caminho padrão | Uso premium/exceção |
+|---|---|---|
+| `business-monitor` | `web_fetch` nas fontes fixas | `web_search` só se a fonte mudar |
+| `edital_monitor` | `web_fetch` nas páginas institucionais | `web_search` domain-scoped; `browser` só se a listagem for JS |
+| `politics_economy_monitor` | `web_fetch` nas seções/fontes fixas | `web_search` seletivo; Tavily só em picos temáticos |
+| `curadoria-temas-diarios` | `web_search` (`duckduckgo`) + `web_fetch` | Tavily apenas para IA, tecnologia, startups/negócios e ciência |
+| `daily-content-creator` | Tavily + `web_fetch` | `browser` apenas para LinkedIn ou páginas JS/login |
+| `tech-news-digest` | RSS/GitHub/Reddit + Tavily no `fetch-web.py` | Brave apenas como overflow |
+| `fetch-trending-topics` / `x-trending` | `browser` | Não gastar Tavily |
+| `trends` | `web_fetch` em `trends24.in` | `browser` só se a página quebrar |
+| `reddit-digest` / `reddit_digest` | Reddit JSON/API + `web_fetch` opcional para links externos | Sem busca web por padrão |
+| `github-weekly-summary` | APIs GitHub/Jira/Notion/Discord | Sem `web_search`/`browser` |
+| `sindico-leads` | `web_search` (`duckduckgo`) + `web_fetch` | Tavily só para shortlist; `browser` para LinkedIn/Instagram/diretórios JS |
 
 ---
 

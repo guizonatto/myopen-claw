@@ -8,6 +8,7 @@ metadata:
         description: Busca Wikipedia para auto-atualização semanal dos padrões
       - bash: git
         description: Commit e push das atualizações de ai-patterns.md
+    model: usage-router/google/gemini-2.5-flash
 ---
 
 # Humanizer

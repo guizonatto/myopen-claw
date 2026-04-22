@@ -1,24 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# ── Bootstrap de sistema (installs em runtime; sem RUN no Dockerfile) ─────────
 chown -R root:root /app/extensions 2>/dev/null || true
-
-if ! command -v docker >/dev/null 2>&1; then
-    echo "[SYS] Instalando Docker CLI..."
-    apt-get update -qq && apt-get install -y --no-install-recommends docker.io \
-        && rm -rf /var/lib/apt/lists/* || echo "[SYS] docker.io indisponivel, continuando."
-fi
-
-if [ ! -d "/opt/openclaw-bootstrap/extensions/memclaw" ] && \
-   [ -f "/opt/openclaw-bootstrap/memclaw.tgz" ]; then
-    echo "[SYS] Instalando MemClaw..."
-    mkdir -p /opt/openclaw-bootstrap/extensions/memclaw
-    tar -xzf /opt/openclaw-bootstrap/memclaw.tgz \
-        -C /opt/openclaw-bootstrap/extensions/memclaw --strip-components=1
-    cd /opt/openclaw-bootstrap/extensions/memclaw && npm install --omit=dev
-fi
-# ─────────────────────────────────────────────────────────────────────────────
+# docker.io + memclaw npm install movidos para o Dockerfile (build-time).
 
 cd /app 2>/dev/null || cd /workspace 2>/dev/null || cd "$(dirname "$0")"
 APP_ROOT=$(pwd)
@@ -31,9 +15,112 @@ GIT_STAGING_DIR="$CONFIG_DIR/git-staging"
 ONBOARD_HASH_FILE="$CONFIG_DIR/.onboard_version"
 USER_VERSION_FILE="$CONFIG_DIR/.user_version"
 CRON_HASH_FILE="$CONFIG_DIR/.cron_version"
+SKILLS_SYNC_HASH_FILE="$CONFIG_DIR/.skills_sync_version"
 
 mkdir -p "$CONFIG_DIR" "$WORKSPACE_DIR" "$CONFIG_DIR/hooks"
 mkdir -p "$CONFIG_DIR/extensions"
+
+# OpenClaw blocks loading plugin candidates from world-writable paths/files.
+# Ensure extensions tree is never group/other-writable before running any OpenClaw command.
+chmod -R go-w "$CONFIG_DIR/extensions" 2>/dev/null || true
+find "$CONFIG_DIR/extensions" -type d -exec chmod 755 {} \; 2>/dev/null || true
+find "$CONFIG_DIR/extensions" -type f -exec chmod 644 {} \; 2>/dev/null || true
+
+sync_runtime_stack_assets() {
+    mkdir -p "$WORKSPACE_DIR/configs" "$WORKSPACE_DIR/scripts"
+
+    if [ -f "$SOURCE_WORKSPACE/configs/model-stack.json" ]; then
+        cp "$SOURCE_WORKSPACE/configs/model-stack.json" "$WORKSPACE_DIR/configs/model-stack.json"
+    fi
+    if [ -f "$SOURCE_WORKSPACE/configs/model-limits.json" ]; then
+        cp "$SOURCE_WORKSPACE/configs/model-limits.json" "$WORKSPACE_DIR/configs/model-limits.json"
+    fi
+    if [ -f "$SOURCE_WORKSPACE/configs/TOOLS.md" ]; then
+        cp "$SOURCE_WORKSPACE/configs/TOOLS.md" "$WORKSPACE_DIR/configs/TOOLS.md"
+    fi
+
+    if [ -f "$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs" ]; then
+        cp "$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs" "$WORKSPACE_DIR/scripts/apply-model-stack.mjs"
+    fi
+}
+
+apply_runtime_model_stack() {
+    local config_path="$CONFIG_DIR/openclaw.json"
+    local persisted_stack="$WORKSPACE_DIR/configs/model-stack.json"
+    local bootstrap_stack="$SOURCE_WORKSPACE/configs/model-stack.json"
+    local stack_path=""
+    local script_path="$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs"
+
+    if [ -f "$persisted_stack" ]; then
+        stack_path="$persisted_stack"
+    elif [ -f "$bootstrap_stack" ]; then
+        stack_path="$bootstrap_stack"
+    fi
+
+    if [ -n "$stack_path" ] && [ -f "$script_path" ] && [ -f "$config_path" ]; then
+        node "$script_path" --config "$config_path" --stack "$stack_path" --print >/dev/null 2>&1 || true
+    else
+        echo " >>> [models] model stack assets missing (config=$config_path stack=$stack_path script=$script_path)"
+    fi
+}
+
+sync_llm_metrics_proxy_model_limits() {
+    local proxy_root="${MODEL_USAGE_PROXY_ROOT:-http://llm-metrics-proxy:8080}"
+    proxy_root="${proxy_root%/}"
+
+    if ! command -v curl >/dev/null 2>&1; then
+        echo " >>> [models] curl não encontrado — pulando sync do llm-metrics-proxy."
+        return 0
+    fi
+
+    if curl -fsS "$proxy_root/healthz" >/dev/null 2>&1; then
+        curl -fsS -X POST "$proxy_root/admin/openclaw/sync-model-limits" >/dev/null 2>&1 || true
+    fi
+}
+
+init_obsidian_vault() {
+    local vault_dir="${OBSIDIAN_VAULT_PATH:-/vault}"
+    local obsidian_repo="${OBSIDIAN_GIT_REPO:-}"
+
+    if [ -z "$obsidian_repo" ]; then
+        echo " >>> [VAULT] OBSIDIAN_GIT_REPO não definido — sincronização git do vault desabilitada."
+        return 0
+    fi
+
+    # Inject GITHUB_TOKEN into URL for auth
+    local remote_url="$obsidian_repo"
+    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$obsidian_repo" | grep -q "github.com"; then
+        remote_url="$(echo "$obsidian_repo" | sed "s|https://github.com/|https://${GITHUB_TOKEN}@github.com/|")"
+    fi
+
+    mkdir -p "$vault_dir"
+
+    if [ ! -d "$vault_dir/.git" ]; then
+        # Check if the directory has existing content (e.g. local vault files)
+        if [ -n "$(ls -A "$vault_dir" 2>/dev/null)" ]; then
+            echo " >>> [VAULT] Vault tem conteúdo local — inicializando git e conectando ao remoto..."
+            git -C "$vault_dir" init -b main 2>/dev/null || git -C "$vault_dir" init
+            git -C "$vault_dir" remote add origin "$remote_url"
+            git -C "$vault_dir" fetch origin main --depth=1 2>&1 | tail -3 || true
+            # Merge remote into local without overwriting (allow unrelated histories)
+            git -C "$vault_dir" merge --allow-unrelated-histories -m "vault: merge remote on init" FETCH_HEAD 2>&1 | tail -5 || true
+        else
+            echo " >>> [VAULT] Clonando vault Obsidian de $obsidian_repo..."
+            if ! git clone "$remote_url" "$vault_dir" 2>&1 | tail -3; then
+                echo " !!! [VAULT] Falha ao clonar vault — verifique OBSIDIAN_GIT_REPO e GITHUB_TOKEN."
+                return 0
+            fi
+        fi
+        git -C "$vault_dir" config user.email "${GIT_USER_EMAIL:-openclaw-bot@noreply}"
+        git -C "$vault_dir" config user.name "${GIT_USER_NAME:-OpenClaw Bot}"
+        echo " >>> [VAULT] Vault git inicializado em $vault_dir."
+    else
+        echo " >>> [VAULT] Vault git já existe em $vault_dir — atualizando remote URL."
+        git -C "$vault_dir" remote set-url origin "$remote_url" 2>/dev/null || true
+        git -C "$vault_dir" config user.email "${GIT_USER_EMAIL:-openclaw-bot@noreply}"
+        git -C "$vault_dir" config user.name "${GIT_USER_NAME:-OpenClaw Bot}"
+    fi
+}
 
 init_git_staging() {
     if [ -z "${GITHUB_TOKEN:-}" ] || [ -z "${GITHUB_ORG:-}" ] || [ -z "${GITHUB_REPO:-}" ]; then
@@ -82,6 +169,7 @@ seed_bootstrap() {
 }
 
 seed_bootstrap
+sync_runtime_stack_assets
 
 reconcile_openclaw_config() {
     local config_path="$CONFIG_DIR/openclaw.json"
@@ -94,14 +182,14 @@ reconcile_openclaw_config() {
     echo " >>> Reconciliando configuracao persistida do OpenClaw..."
     CONFIG_PATH="$config_path" \
     CORTEX_MEM_URL_VALUE="${CORTEX_MEM_URL:-http://cortex-mem:8085}" \
+    MODEL_USAGE_PROXY_ENABLED_VALUE="${MODEL_USAGE_PROXY_ENABLED:-true}" \
+    MODEL_USAGE_PROXY_ROOT_VALUE="${MODEL_USAGE_PROXY_ROOT:-http://llm-metrics-proxy:8080}" \
+    MODEL_USAGE_PROXY_TOKEN_VALUE="${MODEL_USAGE_PROXY_TOKEN:-usage-router-local}" \
     ZAI_API_BASE_URL_VALUE="${ZAI_API_BASE_URL:-https://api.z.ai/api/paas/v4}" \
     ZAI_API_KEY_VALUE="${ZAI_API_KEY:-}" \
     ZAI_MODEL_VALUE="${ZAI_MODEL:-GLM-4.7}" \
     EMBEDDING_MODEL_VALUE="${EMBEDDING_MODEL:-qwen3-embedding:0.6b}" \
     OLLAMA_MODEL_VALUE="${OLLAMA_MODEL:-gemma4}" \
-    NVIDIA_API_KEY_VALUE="${NVIDIA_API_KEY:-}" \
-    NVIDIA_MODEL_VALUE="${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}" \
-    OPENROUTER_MODEL_VALUE="${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}" \
     node <<'EOF'
 const fs = require("fs");
 
@@ -126,32 +214,51 @@ if (config.models?.providers) {
   }
 }
 
-config.mcp ??= {};
-config.mcp.servers ??= {};
-delete config.mcp.servers["mcp-memories"];
-delete config.mcp.servers["memories"];
+ config.mcp ??= {};
+ config.mcp.servers ??= {};
+ delete config.mcp.servers["mcp-memories"];
+ delete config.mcp.servers["memories"];
+ // Garantir que o MCP de leads esteja registrado (alguns setups antigos não tinham).
+ config.mcp.servers["mcp-leads"] ??= {
+   command: "docker",
+   args: ["exec", "-i", "mcp-leads", "python3", "/app/main.py"],
+   type: "stdio",
+ };
 
-config.plugins ??= {};
-config.plugins.slots ??= {};
-config.plugins.entries ??= {};
+ config.plugins ??= {};
+ config.plugins.slots ??= {};
+ config.plugins.entries ??= {};
+ config.plugins.installs ??= {};
+delete config.plugins.entries["@guizonatto/openclaw-usage-router-plugin"];
+delete config.plugins.installs["@guizonatto/openclaw-usage-router-plugin"];
 config.plugins.slots.memory = "memclaw";
+const usageProxyEnabled = !["0", "false", "no", "off"].includes(
+  String(process.env.MODEL_USAGE_PROXY_ENABLED_VALUE || "true").toLowerCase()
+);
+const usageProxyRoot = (process.env.MODEL_USAGE_PROXY_ROOT_VALUE || "http://llm-metrics-proxy:8080").replace(/\/+$/, "");
+const ollamaModelRef = `usage-router/ollama/${process.env.OLLAMA_MODEL_VALUE || "gemma4"}`;
+const embeddingModelRef = `usage-router/ollama/${process.env.EMBEDDING_MODEL_VALUE}`;
 config.plugins.entries.memclaw = {
   enabled: true,
   config: {
     serviceUrl: process.env.CORTEX_MEM_URL_VALUE,
     tenantId: "tenant_claw",
     autoStartServices: false,
-    llmApiBaseUrl: process.env.ZAI_API_BASE_URL_VALUE,
-    llmApiKey: process.env.ZAI_API_KEY_VALUE,
-    llmModel,
-    embeddingApiBaseUrl: "http://host.docker.internal:11434/v1",
-    embeddingApiKey: "ollama",
-    embeddingModel: process.env.EMBEDDING_MODEL_VALUE,
+    llmApiBaseUrl: usageProxyEnabled ? `${usageProxyRoot}/memclaw/v1` : "http://host.docker.internal:11434/v1",
+    llmApiKey: usageProxyEnabled ? (process.env.MODEL_USAGE_PROXY_TOKEN_VALUE || "usage-router-local") : "ollama",
+    llmModel: usageProxyEnabled ? ollamaModelRef : (process.env.OLLAMA_MODEL_VALUE || "gemma4"),
+    embeddingApiBaseUrl: usageProxyEnabled ? `${usageProxyRoot}/memclaw/v1` : "http://host.docker.internal:11434/v1",
+    embeddingApiKey: usageProxyEnabled ? (process.env.MODEL_USAGE_PROXY_TOKEN_VALUE || "usage-router-local") : "ollama",
+    embeddingModel: usageProxyEnabled ? embeddingModelRef : process.env.EMBEDDING_MODEL_VALUE,
   },
 };
 
 config.plugins.allow = Array.from(
-  new Set([...(config.plugins.allow ?? []), "memclaw", "evolution"])
+  new Set(
+    (config.plugins.allow ?? [])
+      .filter((id) => id !== "@guizonatto/openclaw-usage-router-plugin")
+      .concat(["memclaw", "evolution", "usage-router"])
+  )
 );
 
 const ollamaModel = process.env.OLLAMA_MODEL_VALUE || "gemma4";
@@ -162,27 +269,59 @@ config.models.providers.ollama ??= {};
 config.models.providers.ollama.baseUrl = "http://host.docker.internal:11434";
 config.models.providers.ollama.apiKey ??= "ollama-local";
 config.models.providers.ollama.api ??= "ollama";
-const nvidiaKey = process.env.NVIDIA_API_KEY_VALUE || "";
-const nvidiaModel = process.env.NVIDIA_MODEL_VALUE || "google/gemma-4-31b-it:latest";
-const openrouterModel = process.env.OPENROUTER_MODEL_VALUE || "google/gemma-4-31b-it:free";
+if (usageProxyEnabled) {
+  config.models.providers["usage-router"] ??= {};
+  config.models.providers["usage-router"].baseUrl = `${usageProxyRoot}/openclaw/v1`;
+  config.models.providers["usage-router"].apiKey = process.env.MODEL_USAGE_PROXY_TOKEN_VALUE || "usage-router-local";
+  config.models.providers["usage-router"].api = "openai-completions";
+  config.models.providers["usage-router"].models ??= [];
+}
 config.agents ??= {};
 config.agents.defaults ??= {};
 config.agents.defaults.memorySearch = { enabled: false };
-if (nvidiaKey) {
-  config.agents.defaults.model = {
-    primary: `nvidia/${nvidiaModel}`,
-    fallbacks: [`openrouter/${openrouterModel}`, `ollama/${ollamaModel}`],
+// Default model stack is applied by scripts/apply-model-stack.mjs (runs after reconcile).
+config.agents.defaults.model ??= { primary: `ollama/${ollamaModel}`, fallbacks: [] };
+  config.tools ??= {};
+  config.tools.web ??= {};
+  config.tools.web.fetch ??= {};
+  config.tools.web.fetch.enabled = true;
+  config.tools.web.search ??= {};
+  const globalSearchProvider = String(process.env.GLOBAL_WEB_SEARCH_PROVIDER || "").trim();
+  const legacySearchProvider = String(process.env.WEB_SEARCH_PROVIDER || "").trim();
+  const requestedSearchProvider = String(
+    globalSearchProvider && globalSearchProvider.toLowerCase() !== "duckduckgo"
+      ? globalSearchProvider
+      : legacySearchProvider || globalSearchProvider || "duckduckgo",
+  )
+    .trim()
+    .toLowerCase();
+  const hasKey = (name) => Boolean(String(process.env[name] || "").trim());
+  const canUseSearchProvider = (provider) => {
+    switch (provider) {
+      case "duckduckgo":
+        return true;
+      case "tavily":
+        return hasKey("TAVILY_API_KEY");
+      case "brave":
+        return hasKey("BRAVE_API_KEY") || hasKey("BRAVE_API_KEYS");
+      case "firecrawl":
+        return hasKey("FIRECRAWL_API_KEY");
+      default:
+        return true;
+    }
   };
-  config.models ??= {};
-  config.models.providers ??= {};
-  config.models.providers.nvidia = {
-    apiKey: nvidiaKey,
-    baseUrl: "https://integrate.api.nvidia.com/v1",
-    api: "openai-completions",
-    models: [],
-  };
+  const effectiveSearchProvider = canUseSearchProvider(requestedSearchProvider)
+    ? requestedSearchProvider
+    : "duckduckgo";
+  config.tools.web.search.provider = effectiveSearchProvider;
+config.skills ??= {};
+config.skills.entries ??= {};
+config.skills.entries["tech-news-digest"] ??= {};
+config.skills.entries["tech-news-digest"].env ??= {};
+if (process.env.TAVILY_API_KEY) {
+  config.skills.entries["tech-news-digest"].env.WEB_SEARCH_BACKEND = "tavily";
 } else {
-  config.agents.defaults.model = { primary: `ollama/${ollamaModel}`, fallbacks: [] };
+  delete config.skills.entries["tech-news-digest"].env.WEB_SEARCH_BACKEND;
 }
 
 config.gateway ??= {};
@@ -195,25 +334,37 @@ fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 EOF
 }
 
+init_obsidian_vault
 reconcile_openclaw_config
+
+# Log provider selection (helps debug WEB_SEARCH_PROVIDER vs GLOBAL_WEB_SEARCH_PROVIDER precedence)
+if command -v node >/dev/null 2>&1 && [ -f "$CONFIG_DIR/openclaw.json" ]; then
+    WEB_SEARCH_EFFECTIVE="$(
+        node -e "const fs=require('fs');try{const cfg=JSON.parse(fs.readFileSync('$CONFIG_DIR/openclaw.json','utf8'));const p=(((cfg.tools||{}).web||{}).search||{}).provider||'';process.stdout.write(String(p));}catch(e){}" 2>/dev/null || true
+    )"
+    if [ -n "${WEB_SEARCH_EFFECTIVE:-}" ]; then
+        REQUESTED_WEB_SEARCH_PROVIDER="${GLOBAL_WEB_SEARCH_PROVIDER:-}"
+        if [ -z "${REQUESTED_WEB_SEARCH_PROVIDER:-}" ] || [ "${REQUESTED_WEB_SEARCH_PROVIDER}" = "duckduckgo" ]; then
+            REQUESTED_WEB_SEARCH_PROVIDER="${WEB_SEARCH_PROVIDER:-${REQUESTED_WEB_SEARCH_PROVIDER:-duckduckgo}}"
+        fi
+        TAVILY_KEY_STATUS="missing"
+        [ -n "${TAVILY_API_KEY:-}" ] && TAVILY_KEY_STATUS="set"
+        echo " >>> [web_search] provider=${WEB_SEARCH_EFFECTIVE} (requested=${REQUESTED_WEB_SEARCH_PROVIDER} tavily_key=${TAVILY_KEY_STATUS})"
+    fi
+    unset WEB_SEARCH_EFFECTIVE REQUESTED_WEB_SEARCH_PROVIDER TAVILY_KEY_STATUS
+fi
+
+# Apply repo-tracked model stack after reconciliation so restarts don't revert to legacy defaults.
+apply_runtime_model_stack
+sync_llm_metrics_proxy_model_limits
 init_git_staging
 
-echo " >>> Reparando configuracao (doctor --fix)..."
-node "$APP_ROOT/dist/index.js" doctor --fix 2>/dev/null || true
-
-if [ -n "${NVIDIA_API_KEY:-}" ]; then
-    echo " >>> Configurando NVIDIA NIM como provider primario..."
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.apiKey "${NVIDIA_API_KEY:-}" 2>/dev/null || true
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.baseUrl "https://integrate.api.nvidia.com/v1" 2>/dev/null || true
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.api "openai-completions" 2>/dev/null || true
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.models "[]" --strict-json 2>/dev/null || true
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.primary "nvidia/${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}" 2>/dev/null || true
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.fallbacks "[\"openrouter/${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}\",\"ollama/${OLLAMA_MODEL:-gemma4}\"]" --strict-json 2>/dev/null || true
-else
-    echo " >>> Configurando modelo Ollama..."
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.primary "ollama/${OLLAMA_MODEL:-gemma4}" 2>/dev/null || true
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.fallbacks "[]" --strict-json 2>/dev/null || true
+if [ "${OPENCLAW_DOCTOR:-0}" = "1" ]; then
+    echo " >>> Reparando configuracao (doctor --fix)..."
+    node "$APP_ROOT/dist/index.js" doctor --fix 2>/dev/null || true
 fi
+
+# Model + provider config already applied by reconcile_openclaw_config() above.
 
 CURRENT_HASH="$(
     find \
@@ -250,15 +401,81 @@ fi
 
 EVOLUTION_PLUGIN_DIR="/root/.openclaw/extensions/evolution"
 EVOLUTION_PLUGIN_TGZ="/app/plugins/guizonatto-evolution-plugin-1.0.0.tgz"
+USAGE_ROUTER_PLUGIN_SRC="/app/plugins/usage-router-plugin"
+
+fix_world_writable_plugin_dir() {
+    local dir="$1"
+    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+        return 0
+    fi
+
+    # OpenClaw blocks loading plugin candidates from world-writable paths.
+    # Ensure group/other are not writable.
+    chmod -R go-w "$dir" 2>/dev/null || true
+    find "$dir" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    find "$dir" -type f -exec chmod 644 {} \; 2>/dev/null || true
+}
+
+find_installed_usage_router_dir() {
+    # When installing from a local folder, OpenClaw may create a hashed extension dir name like:
+    # /root/.openclaw/extensions/@guizonatto-openclaw-usage-router-plugin-<hash>
+    local candidates
+    candidates="$(find /root/.openclaw/extensions -maxdepth 1 -type d -name '@guizonatto-openclaw-usage-router-plugin-*' 2>/dev/null | head -1 || true)"
+    if [ -n "$candidates" ]; then
+        echo "$candidates"
+        return 0
+    fi
+
+    if [ -d "/root/.openclaw/extensions/usage-router" ]; then
+        echo "/root/.openclaw/extensions/usage-router"
+        return 0
+    fi
+
+    echo ""
+}
+
+sync_usage_router_plugin_files() {
+    local installed_dir="$1"
+    if [ -z "$installed_dir" ] || [ ! -d "$installed_dir" ]; then
+        return 0
+    fi
+    if [ ! -d "$USAGE_ROUTER_PLUGIN_SRC" ]; then
+        return 0
+    fi
+
+    # Keep the installed extension in sync with the repo copy. This avoids stale manifests
+    # (e.g. missing 'id') causing gateway config validation to fail.
+    cp "$USAGE_ROUTER_PLUGIN_SRC/openclaw.plugin.json" "$installed_dir/openclaw.plugin.json" 2>/dev/null || true
+    cp "$USAGE_ROUTER_PLUGIN_SRC/index.js" "$installed_dir/index.js" 2>/dev/null || true
+    rm -rf "$installed_dir/src" 2>/dev/null || true
+    cp -r "$USAGE_ROUTER_PLUGIN_SRC/src" "$installed_dir/src" 2>/dev/null || true
+}
 
 if [ ! -d "$EVOLUTION_PLUGIN_DIR" ] && [ -f "$EVOLUTION_PLUGIN_TGZ" ]; then
     echo " >>> Instalando plugin Evolution..."
     node "$APP_ROOT/dist/index.js" plugins install "$EVOLUTION_PLUGIN_TGZ" --dangerously-force-unsafe-install
 fi
 
-if [ -f "$EVOLUTION_PLUGIN_TGZ" ]; then
-    node "$APP_ROOT/dist/index.js" config set plugins.allow '["evolution","memclaw"]' --strict-json 2>/dev/null || true
+USAGE_ROUTER_INSTALLED_DIR="$(find_installed_usage_router_dir)"
+if [ -n "$USAGE_ROUTER_INSTALLED_DIR" ]; then
+    fix_world_writable_plugin_dir "$USAGE_ROUTER_INSTALLED_DIR"
+    sync_usage_router_plugin_files "$USAGE_ROUTER_INSTALLED_DIR"
+    fix_world_writable_plugin_dir "$USAGE_ROUTER_INSTALLED_DIR"
+else
+    if [ -d "$USAGE_ROUTER_PLUGIN_SRC" ]; then
+        echo " >>> Instalando plugin Usage Router..."
+        node "$APP_ROOT/dist/index.js" plugins install "$USAGE_ROUTER_PLUGIN_SRC" --dangerously-force-unsafe-install || true
+
+        USAGE_ROUTER_INSTALLED_DIR="$(find_installed_usage_router_dir)"
+        if [ -n "$USAGE_ROUTER_INSTALLED_DIR" ]; then
+            fix_world_writable_plugin_dir "$USAGE_ROUTER_INSTALLED_DIR"
+            sync_usage_router_plugin_files "$USAGE_ROUTER_INSTALLED_DIR"
+            fix_world_writable_plugin_dir "$USAGE_ROUTER_INSTALLED_DIR"
+        fi
+    fi
 fi
+
+# plugins.allow already set by reconcile_openclaw_config().
 
 echo " >>> [DEBUG] Checando Variaveis..."
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
@@ -270,37 +487,93 @@ echo " > Telegram Token OK."
 if [ "$NEEDS_ONBOARDING" = "1" ]; then
     echo " >>> [ETAPA 1/5] Iniciando Onboarding..."
     API_KEY_VALUE=""
-    if [ -n "${NVIDIA_API_KEY:-}" ]; then
-        AUTH_CHOICE="skip"
-        API_KEY_VALUE="${NVIDIA_API_KEY}"
-        echo "Usando provider: nvidia (auth-choice skip)"
-    fi
-    PROVIDERS="openrouter-api-key zai-api-key openai-codex"
-    for PROVIDER in $PROVIDERS; do
-        VAR_NAME=$(echo "$PROVIDER" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
-        VAL=$(eval echo "\$$VAR_NAME")
+    AUTH_CHOICE=""
+    for AUTH_CHOICE_CANDIDATE in \
+        groq-api-key \
+        gemini-api-key \
+        google-api-key \
+        mistral-api-key \
+        cerebras-api-key \
+        qwen-api-key \
+        deepseek-api-key \
+        openrouter-api-key \
+        zai-api-key \
+        openai-codex
+    do
+        case "$AUTH_CHOICE_CANDIDATE" in
+            groq-api-key) VAL="${GROQ_API_KEY:-}" ;;
+            gemini-api-key) VAL="${GEMINI_API_KEY:-}" ;;
+            google-api-key) VAL="${GOOGLE_API_KEY:-}" ;;
+            mistral-api-key) VAL="${MISTRAL_API_KEY:-}" ;;
+            cerebras-api-key) VAL="${CEREBRAS_API_KEY:-}" ;;
+            qwen-api-key) VAL="${QWEN_API_KEY:-}" ;;
+            deepseek-api-key) VAL="${DEEPSEEK_API_KEY:-}" ;;
+            openrouter-api-key) VAL="${OPENROUTER_API_KEY:-}" ;;
+            zai-api-key) VAL="${ZAI_API_KEY:-}" ;;
+            openai-codex) VAL="${OPENAI_CODEX:-}" ;;
+            *) VAL="" ;;
+        esac
+
         if [ -n "$VAL" ]; then
-            AUTH_CHOICE="$PROVIDER"
+            AUTH_CHOICE="$AUTH_CHOICE_CANDIDATE"
             API_KEY_VALUE="$VAL"
-            echo "Usando provider: $PROVIDER"
+            echo "Usando provider: $AUTH_CHOICE_CANDIDATE"
             break
         fi
     done
 
     if [ -z "$API_KEY_VALUE" ]; then
-        echo " !!! ERRO: Nenhuma chave de API encontrada para providers suportados (openrouter, zai, openai-codex)."
+        echo " !!! ERRO: Nenhuma chave de API encontrada para providers suportados (groq, gemini/google, mistral, cerebras, qwen, deepseek, openrouter, zai, openai-codex)."
         exit 1
     fi
 
     echo ">>> AI MODEL: $AUTH_CHOICE"
 
-    node "$APP_ROOT/dist/index.js" onboard --non-interactive --accept-risk \
-        --auth-choice "$AUTH_CHOICE" \
-        --"$AUTH_CHOICE" "$API_KEY_VALUE" \
-        --gateway-bind "$GATEWAY_BIND" \
-        --gateway-auth password \
-        --gateway-password "$ADMIN_PASSWORD" \
-        --skip-channels --skip-health
+    ONBOARD_ARGS=(
+        --non-interactive
+        --accept-risk
+        --gateway-bind "$GATEWAY_BIND"
+        --gateway-auth password
+        --gateway-password "$ADMIN_PASSWORD"
+        --skip-channels
+        --skip-health
+    )
+
+    case "$AUTH_CHOICE" in
+        groq-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider groq --token "$API_KEY_VALUE")
+            ;;
+        gemini-api-key|google-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider google --token "$API_KEY_VALUE")
+            ;;
+        mistral-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider mistral --token "$API_KEY_VALUE")
+            ;;
+        cerebras-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider cerebras --token "$API_KEY_VALUE")
+            ;;
+        qwen-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider qwen --token "$API_KEY_VALUE")
+            ;;
+        deepseek-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider deepseek --token "$API_KEY_VALUE")
+            ;;
+        openrouter-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider openrouter --token "$API_KEY_VALUE")
+            ;;
+        zai-api-key)
+            ONBOARD_ARGS+=(--auth-choice apiKey --token-provider zai --token "$API_KEY_VALUE")
+            ;;
+        openai-codex)
+            ONBOARD_ARGS+=(--auth-choice openai-codex --openai-codex "$API_KEY_VALUE")
+            ;;
+        *)
+            echo " !!! ERRO: auth choice nao suportado para onboarding: $AUTH_CHOICE"
+            exit 1
+            ;;
+    esac
+
+    node "$APP_ROOT/dist/index.js" onboard "${ONBOARD_ARGS[@]}"
 
     echo "$USER_VERSION" > "$USER_VERSION_FILE"
     echo "$CURRENT_HASH" > "$ONBOARD_HASH_FILE"
@@ -308,27 +581,36 @@ if [ "$NEEDS_ONBOARDING" = "1" ]; then
 
     echo " >>> [ETAPA 2/5] Ajustando Sandboxing, Browser e Ollama..."
     [ "${ENABLE_SANDBOX:-}" = "true" ] && node "$APP_ROOT/dist/index.js" config set agents.defaults.sandbox.mode "non-main"
-    [ -n "${WEB_SEARCH_PROVIDER:-}" ] && node "$APP_ROOT/dist/index.js" config set tools.web.search.provider "$WEB_SEARCH_PROVIDER"
+    node "$APP_ROOT/dist/index.js" config set tools.web.fetch.enabled true --strict-json
+    WEB_SEARCH_PROVIDER_LEGACY="${WEB_SEARCH_PROVIDER:-}"
+    WEB_SEARCH_PROVIDER="${GLOBAL_WEB_SEARCH_PROVIDER:-duckduckgo}"
+    if [ "${WEB_SEARCH_PROVIDER}" = "duckduckgo" ] && [ -n "${WEB_SEARCH_PROVIDER_LEGACY}" ]; then
+        WEB_SEARCH_PROVIDER="${WEB_SEARCH_PROVIDER_LEGACY}"
+    fi
+    if [ "${WEB_SEARCH_PROVIDER}" = "tavily" ] && [ -z "${TAVILY_API_KEY:-}" ]; then
+        WEB_SEARCH_PROVIDER="duckduckgo"
+    fi
+    if [ "${WEB_SEARCH_PROVIDER}" = "brave" ] && [ -z "${BRAVE_API_KEY:-}" ] && [ -z "${BRAVE_API_KEYS:-}" ]; then
+        WEB_SEARCH_PROVIDER="duckduckgo"
+    fi
+    if [ "${WEB_SEARCH_PROVIDER}" = "firecrawl" ] && [ -z "${FIRECRAWL_API_KEY:-}" ]; then
+        WEB_SEARCH_PROVIDER="duckduckgo"
+    fi
+    node "$APP_ROOT/dist/index.js" config set tools.web.search.provider "${WEB_SEARCH_PROVIDER}"
     node "$APP_ROOT/dist/index.js" config set browser.enabled true --strict-json
 
-    echo "  > Configurando OpenRouter como provider principal..."
-    node "$APP_ROOT/dist/index.js" config set models.providers.openrouter.apiKey "${OPENROUTER_API_KEY:-}"
-    node "$APP_ROOT/dist/index.js" config set models.providers.openrouter.baseUrl "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-    node "$APP_ROOT/dist/index.js" config set models.providers.openrouter.api "openai-completions"
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.primary "openrouter/${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}"
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.fallbacks "[\"ollama/${OLLAMA_MODEL:-gemma4}\"]" --strict-json
+    if [ -n "${TAVILY_API_KEY:-}" ]; then
+        node "$APP_ROOT/dist/index.js" config set skills.entries.tech-news-digest.env.WEB_SEARCH_BACKEND "tavily"
+    fi
 
-    echo "  > Mantendo Ollama configurado como fallback local..."
+    echo "  > Mantendo Ollama configurado como provider local..."
     node "$APP_ROOT/dist/index.js" config set models.providers.ollama.apiKey "${OLLAMA_API_KEY:-ollama-local}"
     node "$APP_ROOT/dist/index.js" config set models.providers.ollama.baseUrl "http://host.docker.internal:11434"
     node "$APP_ROOT/dist/index.js" config set models.providers.ollama.api "ollama"
 
-    echo "  > Configurando NVIDIA NIM como provider primário..."
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.apiKey "${NVIDIA_API_KEY:-}"
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.baseUrl "https://integrate.api.nvidia.com/v1"
-    node "$APP_ROOT/dist/index.js" config set models.providers.nvidia.api "openai-completions"
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.primary "nvidia/${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}"
-    node "$APP_ROOT/dist/index.js" config set agents.defaults.model.fallbacks "[\"openrouter/${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}\",\"ollama/${OLLAMA_MODEL:-gemma4}\"]" --strict-json
+    echo "  > Reaplicando model stack (policy) após onboarding..."
+    sync_runtime_stack_assets
+    apply_runtime_model_stack
 
     echo " >>> [ETAPA 3/5] Conectando Telegram..."
     node "$APP_ROOT/dist/index.js" channels add --channel telegram --token "$TELEGRAM_BOT_TOKEN"
@@ -340,6 +622,8 @@ if [ "$NEEDS_ONBOARDING" = "1" ]; then
         node "$APP_ROOT/dist/index.js" config set channels.discord.token \
             --ref-provider default --ref-source env --ref-id DISCORD_BOT_TOKEN
         node "$APP_ROOT/dist/index.js" config set channels.discord.enabled true --strict-json
+        node "$APP_ROOT/dist/index.js" config set channels.discord.allowFrom '["*"]' --strict-json
+        node "$APP_ROOT/dist/index.js" config set channels.discord.dmPolicy "open" --strict-json
     fi
 
     if [ "${ENABLE_WHATSAPP:-}" = "true" ]; then
@@ -379,23 +663,36 @@ mkdir -p "$SKILLS_REPO_DIR"
 mkdir -p "$SKILLS_TARGET_DIR"
 
 if [ -n "${SKILLS_GIT_REPO:-}" ]; then
-    if [ -d "$SKILLS_REPO_DIR/.git" ]; then
-        echo "Atualizando repositorio de skills..."
-        cd "$SKILLS_REPO_DIR"
-        git fetch origin main
-        git reset --hard origin/main
-    else
-        echo "Clonando repositorio de skills..."
-        rm -rf "$SKILLS_REPO_DIR"
-        git clone "$SKILLS_GIT_REPO" "$SKILLS_REPO_DIR"
+    # Compute remote HEAD hash without a full fetch
+    REMOTE_SKILLS_HASH="$(git ls-remote "$SKILLS_GIT_REPO" refs/heads/main 2>/dev/null | awk '{print $1}')"
+    PREV_SKILLS_HASH=""
+    if [ -f "$SKILLS_SYNC_HASH_FILE" ]; then
+        PREV_SKILLS_HASH=$(cat "$SKILLS_SYNC_HASH_FILE")
     fi
 
-    cd "$APP_ROOT"
-
-    if [ -d "$SKILLS_REPO_DIR/skills" ]; then
-        cp -r "$SKILLS_REPO_DIR/skills/"* "$SKILLS_TARGET_DIR/" 2>/dev/null || true
+    if [ -n "$REMOTE_SKILLS_HASH" ] && [ "$REMOTE_SKILLS_HASH" = "$PREV_SKILLS_HASH" ]; then
+        echo " >>> Skills repo sem alteracao, pulando sincronizacao."
     else
-        cp -r "$SKILLS_REPO_DIR/"* "$SKILLS_TARGET_DIR/" 2>/dev/null || true
+        if [ -d "$SKILLS_REPO_DIR/.git" ]; then
+            echo "Atualizando repositorio de skills..."
+            cd "$SKILLS_REPO_DIR"
+            git fetch origin main
+            git reset --hard origin/main
+        else
+            echo "Clonando repositorio de skills..."
+            rm -rf "$SKILLS_REPO_DIR"
+            git clone "$SKILLS_GIT_REPO" "$SKILLS_REPO_DIR"
+        fi
+
+        cd "$APP_ROOT"
+
+        if [ -d "$SKILLS_REPO_DIR/skills" ]; then
+            cp -r "$SKILLS_REPO_DIR/skills/"* "$SKILLS_TARGET_DIR/" 2>/dev/null || true
+        else
+            cp -r "$SKILLS_REPO_DIR/"* "$SKILLS_TARGET_DIR/" 2>/dev/null || true
+        fi
+
+        [ -n "$REMOTE_SKILLS_HASH" ] && echo "$REMOTE_SKILLS_HASH" > "$SKILLS_SYNC_HASH_FILE"
     fi
 else
     echo " >>> SKILLS_GIT_REPO vazio; pulando sincronizacao externa."
@@ -406,7 +703,7 @@ wait_for_gateway() {
     local max_attempts="${1:-30}"
 
     while [ "$attempt" -le "$max_attempts" ]; do
-        if openclaw cron list >/dev/null 2>&1; then
+        if curl -sf http://127.0.0.1:18789/healthz >/dev/null 2>&1; then
             return 0
         fi
         echo "  ... aguardando gateway ficar pronto ($attempt/$max_attempts)"
@@ -446,6 +743,7 @@ register_versioned_crons() {
         cron_id=$(basename "$cron_file" .cron.md)
         local cron_name
         cron_name=$(tr -d '\r' < "$cron_file" | grep -o -- '--name "[^"]*"' | head -1 | sed 's/--name "//;s/"$//')
+        local cron_command
 
         if [ -n "$cron_name" ] && openclaw cron list 2>/dev/null | grep -qF "\"$cron_name\""; then
             echo "  > Cronjob '$cron_name' ja existe, pulando."
@@ -453,7 +751,18 @@ register_versioned_crons() {
         fi
 
         echo "  > Registrando cronjob: $cron_id"
-        if ! tr -d '\r' < "$cron_file" | sh; then
+        cron_command="$(tr -d '\r' < "$cron_file")"
+        if [ -n "$cron_name" ]; then
+            cron_command="$(
+                python3 -c 'import re, sys, urllib.parse
+name = urllib.parse.quote(sys.argv[1], safe="")
+command = sys.stdin.read()
+marker = f"[telemetry trigger_type=cron trigger_name={name}] "
+print(re.sub(r"--message \"([^\"]*)\"", lambda m: f"--message \"{marker}{m.group(1)}\"", command, count=1), end="")' \
+                "$cron_name" <<<"$cron_command"
+            )"
+        fi
+        if ! printf '%s\n' "$cron_command" | sh; then
             echo "  ! Erro ao registrar cronjob $cron_id."
         fi
     done
@@ -461,6 +770,50 @@ register_versioned_crons() {
     echo "$current_cron_hash" > "$CRON_HASH_FILE"
     echo " >>> Cronjobs registrados e hash atualizado."
 }
+
+seed_memclaw_config() {
+    local cfg_dir="/root/.local/share/memclaw"
+    local cfg_file="$cfg_dir/config.toml"
+    if [ -f "$cfg_file" ]; then
+        return 0
+    fi
+    mkdir -p "$cfg_dir"
+    local ollama_model="${OLLAMA_MODEL:-gemma4}"
+    local embed_model="${EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
+    cat > "$cfg_file" <<TOML
+[qdrant]
+url = "http://qdrant:6334"
+collection_name = "cortex_memories"
+timeout_secs = 30
+
+[llm]
+api_base_url = "http://host.docker.internal:11434/v1"
+api_key = "ollama"
+model_efficient = "$ollama_model"
+temperature = 0.1
+max_tokens = 65536
+
+[embedding]
+api_base_url = "http://host.docker.internal:11434/v1"
+api_key = "ollama"
+model_name = "$embed_model"
+batch_size = 10
+timeout_secs = 30
+
+[server]
+host = "0.0.0.0"
+port = 8085
+cors_origins = ["*"]
+
+[logging]
+enabled = false
+log_directory = "logs"
+level = "info"
+TOML
+    echo " >>> [memclaw] config.toml pre-seeded (ollama/$ollama_model)"
+}
+
+seed_memclaw_config
 
 echo " >>> Subindo Gateway OpenClaw..."
 node "$APP_ROOT/dist/index.js" gateway run &

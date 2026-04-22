@@ -1,31 +1,37 @@
-
 # Índice de Documentação OpenClaw
 
-- [Arquitetura](architecture.md): Visão geral da arquitetura do sistema.
-- [Regras Atômicas](atomic_rules.md): Princípios e regras para desenvolvimento.
-- [Referência de Configuração](config_reference.md): Todos os parâmetros configuráveis.
-- [Decisões de Projeto](decisions.md): Histórico de decisões importantes.
-- [Estrutura Recomendada](estrutura_recomendada.md): Como organizar o repositório.
-- [Como Criar Skills](how-to-create-skills -in-openclaw.md): Passo a passo para criar novas skills.
-- [Referência OpenClaw](openclaw_reference.md): Glossário e conceitos do OpenClaw.
-- [Plano de Reorganização](plano_reorganizacao.md): Estratégia para melhorar a documentação.
-- [Hooks](hooks-openclaw.md): Sistema de automação por eventos e integrações.
-- [Standing Orders](standing-orders-openclaw.md): Autoridade permanente e programas autônomos do agente.
-- [Webhooks](webhooks.md): Integração e triggers HTTP externos.
-
-## Manutenção do índice de documentação
-
-Sempre que adicionar, remover ou renomear arquivos em docs/, rode o script de indexação para atualizar o índice:
-
-```sh
-python scripts/docs_index_script.py
-```
-
-Mantenha títulos claros e descritivos no início de cada arquivo markdown para facilitar a navegação.
-
-### Checklist de Manutenção
-
-- [ ] Rode `python scripts/docs_index_script.py` após mudanças em docs/
-- [ ] Mantenha títulos claros nos arquivos markdown
-- [ ] Atualize links cruzados entre docs principais
-- [ ] Revise docs/estrutura_recomendada.md para incluir INDEX.md
+- [Para manter o índice de documentação sempre atualizado:](INDEX_README.md)
+- [Guia Prático: Alembic + SQLAlchemy em Containers Docker (OpenClaw)](alembic-sqlalchemy-docker.md)
+- [Arquitetura OpenClaw — Processos](architecture.md)
+- [Regras de Atomicidade — OpenClaw](atomic_rules.md)
+- [Resumo da configuração avançada do OpenClaw (openclaw.json)](config_reference.md)
+- [Decisões do Projeto OpenClaw](decisions.md)
+- [Organização recomendada de pastas para o projeto OpenClaw](estrutura_recomendada.md)
+- [Hooks](hooks-openclaw.md)
+- [keep this doc update once in a week:](how-to-create-skills -in-openclaw.md)
+- [Proxy de Uso de LLM](llm-usage-proxy.md)
+- [Obrigatoriedade de Migration Alembic em MCPs](mcp-migration-obrigatoria.md)
+- [Uso de Schemas Isolados para Cada MCP no Postgres](mcp-schema-isolado.md)
+- [> Consulte também: [docs/openclaw-mcp.md](openclaw-mcp.md) — padrão oficial de Model Context Protocol (MCP) no OpenClaw.](mcp-server.md)
+- [OpenClaw — Sub-Agents](opecnalw-subagents.md)
+- [OpenClaw — Agent Send](openclaw-agent-send.md)
+- [OpenClaw — Browser (Gerenciado)](openclaw-browser.md)
+- [OpenClaw — Building Plugins](openclaw-building-plugins.md)
+- [Building Channel Plugins](openclaw-channel-plugins.md)
+- [](openclaw-crons.md)
+- [Firecrawl](openclaw-firecrawl.md)
+- [OpenClaw — Gemini Search](openclaw-gemini-search.md)
+- [Tools](openclaw-lobster.md)
+- [Model Context Protocol (MCP) — OpenClaw](openclaw-mcp.md)
+- [Multi-Agent Sandbox & Tools](openclaw-multiagent.md)
+- [Plugins](openclaw-plugins.md)
+- [Building Provider Plugins](openclaw-provider-plugins.md)
+- [Thinking Levels](openclaw-thinking-levels.md)
+- [Web Tools](openclaw-web-browser.md)
+- [Web Tools](openclaw-web-fetch.md)
+- [OpenClaw — Referência Rápida](openclaw_reference.md)
+- [Plano de Integração: Memória Persistente (Cortex-Mem + MemClaw)](plano_integracao_memclaw.md)
+- [Reorganização de skills e pipes](plano_reorganizacao.md)
+- [Veja também: [INDEX.md](INDEX.md)](standing-orders-openclaw.md)
+- [The Six Changes That Made All the Difference](tokens-optimizations-tips.md)
+- [Veja também: [INDEX.md](INDEX.md)](webhooks.md)

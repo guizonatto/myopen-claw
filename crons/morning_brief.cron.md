@@ -1,1 +1,1 @@
-openclaw cron add --name "Morning brief" --cron "0 7 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Summarize overnight updates using skill: curadoria_temas_diarios" --announce --channel telegram --to "${TELEGRAM_USER_ID}"
+openclaw cron add --name "Morning brief" --cron "35 7 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Summarize overnight updates using skill: curadoria_temas_diarios" --announce --channel telegram --to "${TELEGRAM_USER_ID}"

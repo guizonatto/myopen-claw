@@ -20,6 +20,6 @@ def job():
 
 if __name__ == "__main__":
     scheduler = BlockingScheduler(timezone="America/Sao_Paulo")
-    scheduler.add_job(job, 'cron', hour=6, minute=5)
-    print("[tech_news_digest_cron] Agendado para rodar diariamente às 06h05.")
+    scheduler.add_job(job, 'cron', hour=7, minute=0)
+    print("[tech_news_digest_cron] Agendado para rodar diariamente às 07h00.")
     scheduler.start()

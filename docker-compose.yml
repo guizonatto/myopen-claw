@@ -63,6 +63,46 @@ services:
       start_period: 40s
       retries: 5
 
+  llm-metrics-proxy:
+    build:
+      context: .
+      dockerfile: docker/llm-metrics-proxy/Dockerfile
+    container_name: llm-metrics-proxy
+    restart: unless-stopped
+    environment:
+      - MODEL_USAGE_DB_PATH=/data/llm-usage.sqlite3
+      - MODEL_USAGE_REPORT_TIMEZONE=${MODEL_USAGE_REPORT_TIMEZONE:-America/Sao_Paulo}
+      - MODEL_USAGE_RETENTION_DAYS=${MODEL_USAGE_RETENTION_DAYS:-30}
+      - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - OPENCLAW_CONFIG_PATH=/openclaw/openclaw.json
+      - MODEL_LIMITS_CATALOG_PATH=/openclaw/workspace/configs/model-limits.json
+      - MODEL_USAGE_SYNC_OPENCLAW_MODELS=${MODEL_USAGE_SYNC_OPENCLAW_MODELS:-true}
+      - MODEL_USAGE_SYNC_OPENCLAW_MODELS_STRICT=${MODEL_USAGE_SYNC_OPENCLAW_MODELS_STRICT:-true}
+      - MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID=${MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/v1}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
+    volumes:
+      - llm-metrics-data:/data
+      - openclaw-data:/openclaw:ro
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read(); print('ok')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   openclaw-gateway:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-gateway
@@ -72,6 +112,7 @@ services:
       - "18789:18789"
     volumes:
       - openclaw-data:/root/.openclaw
+      - llm-metrics-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
       - ./openclaw.json:/opt/openclaw-bootstrap/openclaw.json
@@ -83,6 +124,7 @@ services:
       - ./memclaw-memclaw-0.9.39.tgz:/opt/openclaw-bootstrap/memclaw.tgz
       - ./mcps:/app/mcps
       - ./requirements.txt:/app/requirements.txt
+      - ./llm_usage_telemetry:/app/llm_usage_telemetry:ro
       - ./plugins:/app/plugins:ro
       - C:/Vault/Pessoal:/vault
     environment:
@@ -94,13 +136,14 @@ services:
       # - GATEWAY_BIND=${GATEWAY_BIND}
       # - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       # - ENABLE_SANDBOX=${ENABLE_SANDBOX}
-      # - WEB_SEARCH_PROVIDER=${WEB_SEARCH_PROVIDER}
+      # - GLOBAL_WEB_SEARCH_PROVIDER=${GLOBAL_WEB_SEARCH_PROVIDER}
+      # - TAVILY_API_KEY=${TAVILY_API_KEY}
       # - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
-      # - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      # - TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
-      # - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      # - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
-      # - DISCORD_ZIND_CONTENT_CHANNEL_ID=${DISCORD_ZIND_CONTENT_CHANNEL_ID}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - DISCORD_ZIND_CONTENT_CHANNEL_ID=${DISCORD_ZIND_CONTENT_CHANNEL_ID}
       # - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
       # - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
       # - ENABLE_WHATSAPP=${ENABLE_WHATSAPP}
@@ -119,26 +162,46 @@ services:
       # - SKILLS_GIT_REPO=${SKILLS_GIT_REPO}
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
       - CORTEX_MEM_URL=http://cortex-mem:8085
-      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
-      - NVIDIA_MODEL=${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+      - GLOBAL_WEB_SEARCH_PROVIDER=${GLOBAL_WEB_SEARCH_PROVIDER:-duckduckgo}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - BRAVE_API_KEYS=${BRAVE_API_KEYS:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN:-}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      - MODEL_USAGE_PROXY_ENABLED=${MODEL_USAGE_PROXY_ENABLED:-true}
+      - MODEL_USAGE_PROXY_ROOT=${MODEL_USAGE_PROXY_ROOT:-http://llm-metrics-proxy:8080}
+      - MODEL_USAGE_PROXY_URL=${MODEL_USAGE_PROXY_URL:-http://llm-metrics-proxy:8080/openclaw}
+      - MODEL_USAGE_PROXY_TOKEN=${MODEL_USAGE_PROXY_TOKEN:-usage-router-local}
+      - MODEL_USAGE_DB_PATH=/data/llm-usage.sqlite3
+      - MODEL_USAGE_REPORT_TIMEZONE=${MODEL_USAGE_REPORT_TIMEZONE:-America/Sao_Paulo}
+      - MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID=${MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID:-}
     entrypoint:
       - /bin/bash
       - /usr/local/bin/entrypoint.sh
     depends_on:
       postgres:
         condition: service_healthy
-      mcp-crm:
-        condition: service_healthy
-      mcp-shopping-tracker:
-        condition: service_healthy
-      evolution-api:
-        condition: service_healthy
       cortex-mem:
+        condition: service_healthy
+      mcp-crm:
+        condition: service_started
+      mcp-shopping-tracker:
+        condition: service_started
+      evolution-api:
+        condition: service_started
+      llm-metrics-proxy:
         condition: service_healthy
     env_file:
       - .env
@@ -175,6 +238,31 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
+  mcp-leads:
+    build:
+      context: ./mcps/leads_mcp
+      dockerfile: Dockerfile
+    image: mcp-leads:latest
+    container_name: mcp-leads
+    environment:
+      - MCP_API_KEY=${MCP_API_KEY}
+      - CRM_EXECUTE_URL=http://mcp-crm:8001/execute
+    volumes:
+      - ./mcps/leads_mcp:/app
+    depends_on:
+      mcp-crm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
     env_file:
       - .env
   mcp-crm:
@@ -231,6 +319,41 @@ services:
       - .env
 
   # ---------------------------------------------------------------------------
+  # Backup — backup diário de PostgreSQL, Qdrant e SQLite → Google Drive
+  # Roda às 4h (após auto-updater das 3h). Requer rclone.conf montado.
+  # Setup: configure rclone.conf com remote "gdrive" e defina GDRIVE_FOLDER_ID no .env
+  # ---------------------------------------------------------------------------
+  backup:
+    build:
+      context: .
+      dockerfile: docker/backup/Dockerfile
+    container_name: openclaw-backup
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PGHOST=postgres
+      - PGUSER=openclaw
+      - PGPASSWORD=openclaw
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-cortex_memories}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_USER_ID=${TELEGRAM_USER_ID:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_ALERT_CHANNEL_ID=${DISCORD_ALERT_CHANNEL_ID:-}
+    volumes:
+      - llm-metrics-data:/data
+      - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
+      - ./gdrive-sa.json:/secrets/gdrive-sa.json:ro
+    networks:
+      - default
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
   # Auto-updater — atualiza código e banco de dados diariamente às 3h
   # Não requer nenhuma ação manual. Só funciona se o repositório estiver no servidor.
   # ---------------------------------------------------------------------------
@@ -282,13 +405,13 @@ services:
       - QDRANT_URL=http://qdrant:6334
       - QDRANT_COLLECTION=cortex_memories
       - EMBEDDING_DIM=1024
-      - LLM_API_KEY=ollama
-      - LLM_API_BASE_URL=http://host.docker.internal:11434/v1
-      - LLM_MODEL=${OLLAMA_MODEL:-gemma4}
-      - EMBEDDING_API_KEY=ollama
-      - EMBEDDING_API_BASE_URL=http://host.docker.internal:11434/v1
-      - EMBEDDING_MODEL_NAME=qwen3-embedding:0.6b
-      - EMBEDDING_MODEL=qwen3-embedding:0.6b
+      - LLM_API_KEY=${MODEL_USAGE_PROXY_TOKEN:-usage-router-local}
+      - LLM_API_BASE_URL=${MODEL_USAGE_PROXY_ROOT:-http://llm-metrics-proxy:8080}/memclaw/v1
+      - LLM_MODEL=usage-router/ollama/${OLLAMA_MODEL:-gemma4}
+      - EMBEDDING_API_KEY=${MODEL_USAGE_PROXY_TOKEN:-usage-router-local}
+      - EMBEDDING_API_BASE_URL=${MODEL_USAGE_PROXY_ROOT:-http://llm-metrics-proxy:8080}/memclaw/v1
+      - EMBEDDING_MODEL_NAME=usage-router/ollama/${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      - EMBEDDING_MODEL=usage-router/ollama/${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
     ports:
       - "8085:8085"
     volumes:
@@ -315,3 +438,4 @@ volumes:
   mcp-trends-data:
   mcp-crm-data:
   mcp-shopping-tracker-data:
+  llm-metrics-data:

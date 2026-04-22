@@ -1,1 +1,1 @@
-openclaw cron add --name "Tech News Digest" --cron "5 6 * * *" --tz "America/Sao_Paulo" --session isolated --message "Executa o digest diário de notícias de tecnologia." --announce --channel discord --to "channel:${DISCORD_CHANNEL_ID}"
+openclaw cron add --name "Tech News Digest" --cron "0 7 * * *" --tz "America/Sao_Paulo" --session isolated --message "Executa o digest diário de notícias de tecnologia." --announce --channel discord --to "channel:${DISCORD_CHANNEL_ID}"

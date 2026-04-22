@@ -21,7 +21,7 @@ done
 # 3. Se requirements.txt mudou no último pull, rebuild do MCP afetado
 CHANGED=$(git diff HEAD@{1} HEAD --name-only 2>/dev/null || true)
 
-for mcp in crm_mcp trends_mcp shopping_tracker_mcp; do
+for mcp in crm_mcp trends_mcp shopping_tracker_mcp leads_mcp; do
     if echo "$CHANGED" | grep -q "mcps/$mcp/requirements.txt"; then
         service=$(echo "$mcp" | sed 's/_mcp//' | sed 's/_/-/g')
         [ "$mcp" = "shopping_tracker_mcp" ] && service="shopping-tracker"

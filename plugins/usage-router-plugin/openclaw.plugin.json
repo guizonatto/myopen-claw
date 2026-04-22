@@ -1,0 +1,13 @@
+{
+  "id": "usage-router",
+  "name": "@guizonatto/openclaw-usage-router-plugin",
+  "version": "0.1.0",
+  "description": "Provider plugin that routes OpenClaw model traffic through the local usage metrics proxy.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": true
+  },
+  "providerAuthEnvVars": [
+    "MODEL_USAGE_PROXY_TOKEN"
+  ]
+}

@@ -46,6 +46,8 @@ htmlcov/
 .github/
 
 # Outros
+rclone.conf
+gdrive-sa.json
 *.bak
 *.swp
 *.tmp

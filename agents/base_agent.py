@@ -7,7 +7,10 @@ Copie e customize: cp agents/base_agent.py agents/meu_agente.py
 Executar: python -m agents.meu_agente
 """
 import importlib
-from openclaw.memory_db import add_memory
+import os
+import sys
+
+from openclaw.cortex_mem import CortexMemClient, sanitize_session_id
 
 
 class BaseAgent:
@@ -27,8 +30,18 @@ class BaseAgent:
         module.run(**kwargs)
 
     def remember(self, tipo: str, conteudo: str):
-        """Salva uma observação no memory DB."""
-        add_memory(tipo, conteudo)
+        """Salva uma observação como memória semântica (MemClaw/Cortex Memory)."""
+        session_id = sanitize_session_id(os.getenv("MEMCLAW_SESSION_ID") or f"agent-{self.name}")
+        client = CortexMemClient()
+        try:
+            client.add_message(
+                session_id,
+                role="assistant",
+                content=f"[{tipo}] {conteudo}",
+                metadata={"tipo": tipo, "agent": self.name},
+            )
+        except Exception as exc:
+            print(f"[{self.name}] warn: falha ao salvar memória no MemClaw: {exc}", file=sys.stderr)
 
     def decide_and_run(self):
         """

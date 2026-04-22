@@ -9,21 +9,19 @@ import os
 
 # Configuração do banco (ajustar conforme ambiente)
 CRM_DB_URL = os.getenv('CRM_DB_URL', 'postgresql://user:pass@localhost:5432/crm')
-MEMORIES_DB_URL = os.getenv('MEMORIES_DB_URL', 'postgresql://user:pass@localhost:5432/memories')
 
 crm_engine = create_engine(CRM_DB_URL)
-memories_engine = create_engine(MEMORIES_DB_URL)
 CRM_Session = sessionmaker(bind=crm_engine)
-Memories_Session = sessionmaker(bind=memories_engine)
 
 
 def job():
     crm_session = CRM_Session()
-    memories_session = Memories_Session()
-    agent = LeadFetcherAgent(crm_session, memories_session)
+    agent = LeadFetcherAgent(
+        crm_session,
+        memclaw_session_id=os.getenv("MEMCLAW_SESSION_ID") or "agent-lead_fetcher",
+    )
     agent.processar_leads()
     crm_session.close()
-    memories_session.close()
 
 
 if __name__ == "__main__":

@@ -5,13 +5,13 @@
   ```python
   class Memory(Base):
       __tablename__ = 'memories'
-      __table_args__ = {'schema': 'memories_mcp'}
+      __table_args__ = {'schema': 'example_mcp'}
       # ... campos ...
   ```
   Ou defina o schema padrão para todos os modelos:
   ```python
   from sqlalchemy import MetaData
-  Base = declarative_base(metadata=MetaData(schema='memories_mcp'))
+  Base = declarative_base(metadata=MetaData(schema='example_mcp'))
   ```
 - O alembic.ini pode continuar apontando para o mesmo banco, mas as migrations criarão as tabelas no schema correto.
 - Para bancos realmente separados, use DATABASE_URLs diferentes.

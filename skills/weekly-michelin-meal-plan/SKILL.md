@@ -1,6 +1,9 @@
 ---
 name: weekly-michelin-meal-plan
 description: "Generate a Michelin-level weekly meal plan (lunch for 1, dinner for 2) using local and seasonal ingredients, prioritizing the use of perishable ingredients, ensuring all meals can be prepared in under 20 minutes, producing a complete grocery list for the week, adapting to user ingredient preferences (avoiding disliked ingredients), and focusing on balanced, nutritionist-approved meals."
+metadata:
+  openclaw:
+    model: usage-router/google/gemini-2.5-flash
 ---
 
 

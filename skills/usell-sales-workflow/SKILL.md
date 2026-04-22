@@ -3,7 +3,7 @@ name: usell-sales-workflow
 description: "Agente de vendas pro-ativo da Usell. Opera em dois modos: (1) Reativo — responde mensagem recebida de lojista no WhatsApp/Instagram; (2) Proativo — inicia ou reengaja contatos com pipeline ativo há mais de 24h sem resposta. Detecta intent, aplica técnica correta para o estágio, atualiza CRM e envia via WhatsApp simulando digitação humana. Use sempre que houver mensagem de lead ou trigger de reengajamento."
 metadata:
   openclaw:
-    model: anthropic/sonnet
+    model: usage-router/google/gemini-2.5-flash
     tools:
       - mcp: mcp-crm
         ops: [search_contact, add_contact, update_contact, list_contacts_to_follow_up]

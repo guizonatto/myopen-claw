@@ -1,6 +1,9 @@
 ---
 name: curadoria-temas-diarios
 description: Buscar diariamente, às 09h, as principais notícias e conteúdos dos temas definidos, realizando curadoria e entregando um resumo organizado por tema.
+metadata:
+  openclaw:
+    model: usage-router/mistral/mistral-medium-2508
 ---
 
 ## Objetivo
@@ -60,6 +63,12 @@ Buscar diariamente, às 09h, as principais notícias e conteúdos dos temas defi
 3. Gerar resumo estruturado por tema.
 4. Output: lista de temas, cada um com manchetes, links e breve resumo.
 
+## Política de busca
+- Caminho padrão: `web_search` com `duckduckgo` para descoberta ampla e depois `web_fetch` nos links selecionados.
+- Reserve Tavily apenas para os temas mais difíceis ou mais valiosos: IA, tecnologia, startups/negócios e ciência.
+- Evite `browser` por padrão; a maioria das fontes desta skill deve ser resolvida com busca leve + fetch.
+- Priorize diversidade de fontes abertas antes de aprofundar em buscas premium.
+
 ## Observações
 - Não acessar paywall forte.
 - Priorizar fontes abertas e confiáveis.
@@ -101,5 +110,6 @@ Buscar diariamente, às 09h, as principais notícias e conteúdos dos temas defi
 ```
 
 ## Referências
-- docs/openclaw-cronjob.md
-- browser
+- docs/openclaw-crons.md
+- docs/openclaw-web-browser.md
+- docs/openclaw-web-fetch.md

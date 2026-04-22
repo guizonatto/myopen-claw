@@ -1,6 +1,9 @@
 ---
 name: crm
 description: "Skill para criar, atualizar e consultar dados sobre conhecidos, clientes, amigos e familiares, utilizando o serviço MCP-CRM."
+metadata:
+  openclaw:
+    model: usage-router/groq/openai/gpt-oss-20b
 ---
 # Skill: CRM - Gerenciamento de Contatos
 

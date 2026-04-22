@@ -9,6 +9,7 @@ metadata:
     requires:
       bins: ["python3"]
     optionalBins: ["mail", "msmtp", "gog", "gh", "openssl", "weasyprint"]
+    model: usage-router/mistral/mistral-large-latest
 env:
   - name: TWITTER_API_BACKEND
     required: false
@@ -94,6 +95,14 @@ Automated tech news digest system with unified data source model, quality scorin
    ```
 
 4. **Use Templates**: Apply Discord, email, or PDF templates to merged output
+
+## Search policy
+
+- Keep the existing source-specific pipeline as the primary path: RSS, GitHub, Reddit, and Twitter/X direct collection first.
+- For the web-search slice, prefer Tavily when `TAVILY_API_KEY` is available.
+- Use `web_fetch` or the enrichment scripts to read shortlisted article URLs after discovery.
+- Do not use `browser` in the normal daily path for this skill.
+- Use Brave only as optional overflow when Tavily is unavailable or exhausted.
 
 ## Configuration Files
 

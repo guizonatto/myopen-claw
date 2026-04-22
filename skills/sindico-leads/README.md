@@ -1,9 +1,8 @@
 # Sindico Leads Skill
 
-Esta skill busca síndicos profissionais na web, extrai nome, empresa e celular, e cadastra como lead no CRM.
+Esta skill busca síndicos profissionais na web e faz upsert no CRM como `lead`.
 
-- Busca otimizada usando browser e scraping.
-- Output: lista de objetos {nome, empresa, celular}.
-- Cadastro automático no CRM via tool/pipe.
+- Execução preferencial via MCP `mcp-leads` (tool `execute_lead_skill`).
+- Output: contagens (novos, atualizados, divergências), sem PII.
 
 Veja SKILL.md e sindico_leads.yaml para detalhes de uso e schema.

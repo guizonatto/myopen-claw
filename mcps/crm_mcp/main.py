@@ -50,10 +50,28 @@ class CRMRequest(BaseModel):
 @app.post("/execute", dependencies=[Depends(verify_api_key)])
 def execute_crm(req: CRMRequest):
     if req.operation == "add_contact":
-        if not req.nome or not req.email:
-            return {"result": "Erro: nome e email obrigatórios para adicionar contato."}
-        contato_id = add_contato(nome=req.nome, email=req.email, cnpj=req.cnpj, cnaes=req.cnaes)
-        return {"result": f"Contato '{req.nome}' <{req.email}> adicionado.", "id": contato_id}
+        if not req.nome:
+            return {"result": "Erro: nome obrigatório para adicionar contato."}
+        if not (req.email or req.whatsapp or req.telefone):
+            return {"result": "Erro: informe pelo menos um contato (email, whatsapp ou telefone)."}
+        contato_id = add_contato(
+            nome=req.nome,
+            apelido=req.apelido,
+            tipo=req.tipo,
+            telefone=req.telefone,
+            whatsapp=req.whatsapp,
+            email=req.email,
+            linkedin=req.linkedin,
+            instagram=req.instagram,
+            empresa=req.empresa,
+            cargo=req.cargo,
+            setor=req.setor,
+            cnpj=req.cnpj,
+            cnaes=req.cnaes,
+            notas=req.nota,
+        )
+        ident = req.email or req.whatsapp or req.telefone
+        return {"result": f"Contato '{req.nome}' ({ident}) adicionado.", "id": contato_id}
     elif req.operation == "search_contact":
         if not req.query:
             return {"result": "Erro: query obrigatória para busca."}
@@ -125,16 +143,31 @@ async def list_tools():
     return [
         Tool(
             name="add_contact",
-            description="Adiciona um novo contato ao CRM.",
+            description="Adiciona um novo contato ao CRM (email OU whatsapp OU telefone).",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "nome": {"type": "string", "description": "Nome do contato"},
-                    "email": {"type": "string", "description": "Email do contato"},
+                    "apelido": {"type": "string"},
+                    "tipo": {"type": "string", "description": "cliente|amigo|familiar|conhecido|lead (livre)"},
+                    "email": {"type": "string", "description": "Email do contato (opcional)"},
+                    "telefone": {"type": "string", "description": "Telefone do contato (opcional)"},
+                    "whatsapp": {"type": "string", "description": "WhatsApp do contato (opcional)"},
+                    "linkedin": {"type": "string"},
+                    "instagram": {"type": "string"},
+                    "empresa": {"type": "string"},
+                    "cargo": {"type": "string"},
+                    "setor": {"type": "string"},
+                    "nota": {"type": "string", "description": "Nota inicial (opcional)"},
                     "cnpj": {"type": "string", "description": "CNPJ da empresa (formato XX.XXX.XXX/XXXX-XX)"},
                     "cnaes": {"type": "array", "items": {"type": "string"}, "description": "Lista de CNAEs"}
                 },
-                "required": ["nome", "email"]
+                "required": ["nome"],
+                "anyOf": [
+                    {"required": ["email"]},
+                    {"required": ["whatsapp"]},
+                    {"required": ["telefone"]}
+                ]
             }
         ),
         Tool(
@@ -188,9 +221,19 @@ async def call_tool(name: str, arguments: dict):
         if name == "add_contact":
             contato_id = add_contato(
                 nome=arguments["nome"],
-                email=arguments["email"],
+                apelido=arguments.get("apelido"),
+                tipo=arguments.get("tipo"),
+                telefone=arguments.get("telefone"),
+                whatsapp=arguments.get("whatsapp"),
+                email=arguments.get("email"),
+                linkedin=arguments.get("linkedin"),
+                instagram=arguments.get("instagram"),
+                empresa=arguments.get("empresa"),
+                cargo=arguments.get("cargo"),
+                setor=arguments.get("setor"),
                 cnpj=arguments.get("cnpj"),
                 cnaes=arguments.get("cnaes"),
+                notas=arguments.get("nota") or arguments.get("notas"),
             )
             return [TextContent(type="text", text=f"Contato adicionado com ID: {contato_id}")]
         elif name == "search_contact":

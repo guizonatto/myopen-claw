@@ -1,11 +1,20 @@
 ---
 name: x-trending
 description: "Use esta skill quando o usuário pedir para verificar os trending topics no X (Twitter). Ela detalha como usar a ferramenta 'browser' interna do OpenClaw para extrair as tendências da rede social de forma autônoma."
+metadata:
+  openclaw:
+    model: usage-router/groq/openai/gpt-oss-20b
 ---
 
 # X (Twitter) Trending Topics Crawler
 
 Esta skill instrui o agente a utilizar a ferramenta interna `browser` do OpenClaw para acessar o X, lidar com a interface web da plataforma e coletar os assuntos que estão em alta.
+
+## Política de ferramenta
+
+- Esta skill é `browser`-first por natureza.
+- Não gastar Tavily aqui.
+- Não usar `web_fetch` ou `web_search` como caminho principal, porque o X é dinâmico e frequentemente exige sessão/cookies.
 
 ## O Fluxo Perfeito do Automator
 

@@ -1,3 +1,11 @@
+---
+name: reddit-digest
+description: "Busca top posts de subreddits de IA e organiza um digest."
+metadata:
+  openclaw:
+    model: usage-router/groq/llama-3.1-8b-instant
+---
+
 # Skill: reddit_digest
 
 Busca os principais posts dos subreddits de IA e organiza um digest personalizado, com curadoria baseada em preferências do usuário.
@@ -15,6 +23,12 @@ Busca os principais posts dos subreddits de IA e organiza um digest personalizad
 - Pergunta diariamente se gostou do digest e ajusta as regras de curadoria.
 - Exemplo de regra: "do not include memes".
 - Pronto para rodar via cronjob diário às 17h.
+
+## Política de busca
+- Use Reddit JSON/API pública como fonte principal.
+- Não use `web_search` ou Tavily para descobrir posts do Reddit.
+- Use `web_fetch` apenas para enriquecer links externos já selecionados no digest final.
+- Evite `browser` por padrão.
 
 ## Exemplo de saída
 ```json

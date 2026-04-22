@@ -1,0 +1,15 @@
+{
+  "name": "@guizonatto/openclaw-usage-router-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Provider plugin that routes OpenClaw model traffic through the local usage metrics proxy.",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "providers": [
+      "usage-router"
+    ]
+  }
+}
+

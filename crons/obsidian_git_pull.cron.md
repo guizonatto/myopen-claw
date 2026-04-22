@@ -1,0 +1,1 @@
+openclaw cron add --name "obsidian-git-pull" --cron "0 * * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --no-deliver --agent default --message "Execute the shell command: git -C /vault pull origin main --ff-only 2>&1. Report only errors if any occur, otherwise stay silent."

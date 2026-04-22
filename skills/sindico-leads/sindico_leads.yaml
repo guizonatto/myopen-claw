@@ -12,17 +12,21 @@ tags:
 input_schema:
   type: object
   properties:
+    query:
+      type: string
+      description: Query de busca completa (opcional). Se omitida, será derivada de search_terms.
     search_terms:
       type: array
       items:
         type: string
-      description: Lista de termos de busca para encontrar síndicos profissionais.
+      description: Lista de termos de busca para encontrar síndicos profissionais (opcional).
+      default:
+        - "São Paulo"
     max_results:
       type: integer
       description: Número máximo de leads a retornar.
       default: 50
-  required:
-    - search_terms
+  required: []
 
 output_schema:
   type: array
@@ -42,11 +46,11 @@ output_schema:
 
 run:
   pipe:
-    - browser:
-        query: "{{ search_terms | join(', ') }} síndico profissional telefone celular"
-        max_results: "{{ max_results }}"
+    - web_search:
+        query: "{{ query | default(((search_terms | default(['São Paulo'])) | join(' '))) }} síndico profissional telefone celular"
+        max_results: "{{ max_results | default(50) }}"
     - extract_leads:
-        input: "{{ browser.results }}"
+        input: "{{ web_search.results }}"
     - deduplicate_leads:
         input: "{{ extract_leads.leads }}"
     - add_lead_crm:

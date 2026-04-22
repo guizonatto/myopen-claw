@@ -7,7 +7,7 @@ description: >
   Pode ser agendado via cronjob para rodar diariamente.
 metadata:
   openclaw:
-    model: anthropic/sonnet
+    model: usage-router/google/gemini-2.5-flash
 ---
 
 # Skill: Daily Content Creator
@@ -27,8 +27,10 @@ Pesquisar um tópico, identificar o que está em alta, gerar ideias de conteúdo
 ## Fluxo de execução
 
 ### Etapa 1 — Pesquisa (Research)
-1. Buscar notícias e conteúdos recentes sobre `topic` usando `browser`.
-2. Consultar fontes confiáveis: Google News, Reddit, HackerNews, LinkedIn, newsletters do setor.
+1. Quando `TAVILY_API_KEY` estiver disponível, usar Tavily para fazer 3-5 buscas focadas sobre `topic` e depois abrir apenas os links mais promissores com `web_fetch`.
+2. Se Tavily não estiver disponível, usar `web_search` com `duckduckgo` para descoberta inicial e `web_fetch` para leitura dos links.
+3. Usar `browser` apenas quando a pesquisa depender explicitamente de LinkedIn, páginas com login ou páginas JS-heavy.
+4. Consultar fontes confiáveis: Google News, Reddit, HackerNews, LinkedIn, newsletters do setor.
 3. Identificar:
    - 7 notícias/acontecimentos relevantes das últimas 48h (salvar título + URL de cada uma)
    - 3 tendências emergentes
@@ -167,7 +169,10 @@ Regras:
 - Adaptar tom e vocabulário conforme o parâmetro `tone`.
 - Todo draft final deve passar pela skill `humanize-writing` antes da entrega.
 - Para agendamento diário, usar cronjob OpenClaw com `topic` fixo no comando.
+- Prefira gastar Tavily aqui, não em skills de monitoramento com fontes fixas.
 
 ## Referências
-- browser
+- docs/openclaw-web-browser.md
+- docs/openclaw-web-fetch.md
+- docs/openclaw-browser.md
 - docs/openclaw-crons.md

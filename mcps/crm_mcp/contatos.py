@@ -124,6 +124,11 @@ def search_contatos(query: str, limite: int = 10) -> list[dict]:
                     Contato.nome.ilike(like),
                     Contato.apelido.ilike(like),
                     Contato.empresa.ilike(like),
+                    Contato.email.ilike(like),
+                    Contato.telefone.ilike(like),
+                    Contato.whatsapp.ilike(like),
+                    Contato.linkedin.ilike(like),
+                    Contato.instagram.ilike(like),
                 ),
             )
             .order_by(Contato.nome.asc())

@@ -5,7 +5,7 @@ import httpx
 from db import get_session
 from models import Memory
 
-_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://locahost:11434")
+_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 _EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "qwen3-embedding:4b")
 
 

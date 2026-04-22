@@ -2,6 +2,9 @@
 name: github-weekly-summary
 description: >
   Gera resumos semanais integrando releases do GitHub e entregas do Jira, com múltiplos formatos (FAQ, CEO, Discord, e-mail, RAG, Notion). Exporta para Notion e envia para Discord. Ideal para relatórios executivos, comunicação com clientes e indexação IA. Usa IA para sumarização e scripts para coleta/distribuição.
+metadata:
+  openclaw:
+    model: usage-router/mistral/devstral-medium-latest
 ---
 
 ### Exemplos de canais recomendados para report no Discord
@@ -27,6 +30,11 @@ Sempre envie/resuma as atividades no canal ou página **Weekly Report - Projects
 - Exporta resumos para Notion (nova página por release)
 - Envia resumo para canal Discord
 - Usa IA para sumarização dos dados
+
+## Política de busca
+- Esta skill deve operar via APIs e scripts locais: GitHub, Jira, Notion e Discord.
+- Não usar `web_search`, Tavily ou `browser` como parte do fluxo padrão.
+- Só recorrer à web aberta se houver uma falha excepcional de API e isso for realmente necessário para fechar uma lacuna pontual.
 
 ## Como usar (passo a passo detalhado)
 1. **Configure TODAS as variáveis de ambiente obrigatórias:**
