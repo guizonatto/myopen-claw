@@ -1,0 +1,108 @@
+{
+  "version": "2026-04-21",
+  "providers": {
+    "google": {
+      "defaults": {
+        "rpm": 5,
+        "tpm": 250000,
+        "rpd": 20
+      },
+      "models": {
+        "gemini-2.5-flash-lite": {
+          "rpm": 10
+        },
+        "gemini-3.1-flash-lite-preview": {
+          "rpm": 15,
+          "rpd": 500
+        }
+      }
+    },
+    "groq": {
+      "defaults": {
+        "rpm": 30,
+        "max_output_tokens": 8192
+      },
+      "models": {
+        "llama-3.1-8b-instant": {
+          "max_output_tokens": 8192,
+          "context_window": 131072
+        },
+        "llama-3.3-70b-versatile": {
+          "max_output_tokens": 32768,
+          "context_window": 128000
+        },
+        "llama-3.1-70b-versatile": {
+          "max_output_tokens": 8192,
+          "context_window": 131072
+        },
+        "llama3-8b-8192": {
+          "max_output_tokens": 8192,
+          "context_window": 8192
+        },
+        "llama3-70b-8192": {
+          "max_output_tokens": 8192,
+          "context_window": 8192
+        },
+        "mixtral-8x7b-32768": {
+          "max_output_tokens": 32768,
+          "context_window": 32768
+        },
+        "gemma2-9b-it": {
+          "max_output_tokens": 8192,
+          "context_window": 8192
+        },
+        "allam-2-7b": {
+          "max_output_tokens": 4096
+        },
+        "groq/compound": {
+          "max_output_tokens": 8192
+        },
+        "groq/compound-mini": {
+          "max_output_tokens": 8192
+        },
+        "meta-llama/llama-4-scout-17b-16e-instruct": {
+          "max_output_tokens": 8192
+        },
+        "meta-llama/llama-prompt-guard-2-22m": {
+          "max_output_tokens": 512
+        },
+        "meta-llama/llama-prompt-guard-2-86m": {
+          "max_output_tokens": 512
+        },
+        "qwen/qwen3-32b": {
+          "max_output_tokens": 8192
+        }
+      }
+    },
+    "mistral": {
+      "defaults": {
+        "rpm": 20
+      }
+    },
+    "cerebras": {
+      "defaults": {
+        "rpm": 10
+      }
+    },
+    "qwen": {
+      "defaults": {
+        "rpm": 10
+      }
+    },
+    "deepseek": {
+      "defaults": {
+        "rpm": 10
+      }
+    },
+    "openrouter": {
+      "defaults": {
+        "rpm": 10
+      }
+    },
+    "ollama": {
+      "defaults": {
+        "rpm": 60
+      }
+    }
+  }
+}

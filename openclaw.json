@@ -4,22 +4,55 @@
     "servers": {
       "mcp-crm": {
         "command": "docker",
-        "args": ["exec", "-i", "mcp-crm", "python3", "/app/main.py"],
+        "args": [
+          "exec",
+          "-i",
+          "mcp-crm",
+          "python3",
+          "/app/main.py"
+        ],
         "type": "stdio"
       },
       "mcp-shopping": {
         "command": "docker",
-        "args": ["exec", "-i", "mcp-shopping-tracker", "python3", "/app/main.py"],
+        "args": [
+          "exec",
+          "-i",
+          "mcp-shopping-tracker",
+          "python3",
+          "/app/main.py"
+        ],
+        "type": "stdio"
+      },
+      "mcp-leads": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-leads",
+          "python3",
+          "/app/main.py"
+        ],
         "type": "stdio"
       },
       "mcp-trends": {
         "command": "docker",
-        "args": ["exec", "-i", "mcp-trends", "python3", "/app/main.py"],
+        "args": [
+          "exec",
+          "-i",
+          "mcp-trends",
+          "python3",
+          "/app/main.py"
+        ],
         "type": "stdio"
       },
       "obsidian": {
         "command": "npx",
-        "args": ["-y", "obsidian-mcp", "/vault"],
+        "args": [
+          "-y",
+          "obsidian-mcp",
+          "/vault"
+        ],
         "type": "stdio"
       }
     }
@@ -60,11 +93,23 @@
   "browser": {
     "enabled": true
   },
+  "tools": {
+    "web": {
+      "fetch": {
+        "enabled": true
+      },
+      "search": {
+        "provider": "duckduckgo"
+      }
+    }
+  },
   "channels": {
     "whatsapp": {
       "enabled": true,
       "dmPolicy": "open",
-      "allowFrom": ["*"],
+      "allowFrom": [
+        "*"
+      ],
       "groups": {
         "*": {
           "requireMention": true
@@ -75,23 +120,28 @@
   "session": {
     "dmScope": "per-channel-peer"
   },
+  "skills": {
+    "entries": {
+      "tech-news-digest": {
+        "env": {
+          "WEB_SEARCH_BACKEND": "tavily"
+        }
+      }
+    }
+  },
   "models": {
     "providers": {
-      "nvidia": {
-        "apiKey": "${NVIDIA_API_KEY:-}",
-        "baseUrl": "https://integrate.api.nvidia.com/v1",
-        "api": "openai-completions",
-        "models": []
-      },
-      "openrouter": {
-        "apiKey": "${OPENROUTER_API_KEY:-}",
-        "baseUrl": "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}",
-        "api": "openai-completions"
-      },
       "ollama": {
         "apiKey": "ollama-local",
         "baseUrl": "http://host.docker.internal:11434",
-        "api": "ollama"
+        "api": "ollama",
+        "models": []
+      },
+      "usage-router": {
+        "baseUrl": "http://llm-metrics-proxy:8080/openclaw/v1",
+        "apiKey": "usage-router-local",
+        "api": "openai-completions",
+        "models": []
       }
     }
   },
@@ -101,18 +151,283 @@
         "enabled": false
       },
       "model": {
-        "primary": "nvidia/${NVIDIA_MODEL:-google/gemma-4-31b-it:latest}",
+        "primary": "usage-router/groq/llama-3.1-8b-instant",
         "fallbacks": [
-          "openrouter/${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}",
-          "ollama/${OLLAMA_MODEL:-gemma4}"
+          "usage-router/groq/openai/gpt-oss-20b",
+          "usage-router/groq/openai/gpt-oss-safeguard-20b",
+          "usage-router/groq/qwen/qwen3-32b",
+          "usage-router/groq/openai/gpt-oss-120b",
+          "usage-router/groq/llama-3.3-70b-versatile",
+          "usage-router/groq/meta-llama/llama-4-scout-17b-16e-instruct",
+          "usage-router/mistral/mistral-large-latest",
+          "usage-router/mistral/mistral-medium-2508",
+          "usage-router/mistral/mistral-small-latest",
+          "usage-router/mistral/pixtral-large-latest",
+          "usage-router/mistral/codestral-latest",
+          "usage-router/mistral/devstral-medium-latest",
+          "usage-router/mistral/magistral-small-latest",
+          "usage-router/cerebras/llama3.1-8b",
+          "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
+          "usage-router/cerebras/qwen-3-235b-2507",
+          "usage-router/cerebras/gpt-oss-120b",
+          "usage-router/qwen/qwen3.5-flash",
+          "usage-router/qwen/qwen3.5-plus",
+          "usage-router/deepseek/deepseek-chat",
+          "usage-router/deepseek/deepseek-reasoner",
+          "usage-router/google/gemini-2.5-flash",
+          "usage-router/google/gemini-2.5-flash-lite",
+          "usage-router/google/gemini-2.5-pro",
+          "usage-router/google/gemini-3-flash-preview",
+          "usage-router/google/gemini-3-pro-preview",
+          "usage-router/google/gemini-3.1-pro-preview",
+          "usage-router/google/gemini-3.1-pro-preview-customtools",
+          "usage-router/google/gemini-3.1-flash-lite-preview",
+          "usage-router/google/gemini-pro-latest",
+          "usage-router/google/gemini-flash-latest",
+          "usage-router/google/gemini-flash-lite-latest",
+          "usage-router/google/gemini-2.0-flash",
+          "usage-router/google/gemini-2.0-flash-001",
+          "usage-router/google/gemini-2.0-flash-lite",
+          "usage-router/google/gemini-2.0-flash-lite-001",
+          "usage-router/openrouter/openai/gpt-5-mini"
         ]
+      },
+      "models": {
+        "usage-router/groq/llama-3.1-8b-instant": {
+          "alias": "llama-3.1-8b-instant"
+        },
+        "usage-router/groq/openai/gpt-oss-20b": {
+          "alias": "gpt-oss-20b"
+        },
+        "usage-router/groq/openai/gpt-oss-safeguard-20b": {
+          "alias": "gpt-oss-safeguard-20b"
+        },
+        "usage-router/groq/qwen/qwen3-32b": {
+          "alias": "qwen3-32b"
+        },
+        "usage-router/groq/openai/gpt-oss-120b": {
+          "alias": "gpt-oss-120b"
+        },
+        "usage-router/groq/llama-3.3-70b-versatile": {
+          "alias": "llama-3.3-70b-versatile"
+        },
+        "usage-router/groq/meta-llama/llama-4-scout-17b-16e-instruct": {
+          "alias": "llama-4-scout-17b-16e-instruct"
+        },
+        "usage-router/mistral/mistral-large-latest": {
+          "alias": "mistral-large-latest"
+        },
+        "usage-router/mistral/mistral-medium-2508": {
+          "alias": "mistral-medium-2508"
+        },
+        "usage-router/mistral/mistral-small-latest": {
+          "alias": "mistral-small-latest"
+        },
+        "usage-router/mistral/pixtral-large-latest": {
+          "alias": "pixtral-large-latest"
+        },
+        "usage-router/mistral/codestral-latest": {
+          "alias": "codestral-latest"
+        },
+        "usage-router/mistral/devstral-medium-latest": {
+          "alias": "devstral-medium-latest"
+        },
+        "usage-router/mistral/magistral-small-latest": {
+          "alias": "magistral-small-latest"
+        },
+        "usage-router/cerebras/llama3.1-8b": {
+          "alias": "llama3.1-8b"
+        },
+        "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507": {
+          "alias": "qwen-3-235b-a22b-instruct-2507"
+        },
+        "usage-router/cerebras/qwen-3-235b-2507": {
+          "alias": "qwen-3-235b-2507"
+        },
+        "usage-router/cerebras/gpt-oss-120b": {
+          "alias": "gpt-oss-120b"
+        },
+        "usage-router/qwen/qwen3.5-flash": {
+          "alias": "qwen3.5-flash"
+        },
+        "usage-router/qwen/qwen3.5-plus": {
+          "alias": "qwen3.5-plus"
+        },
+        "usage-router/deepseek/deepseek-chat": {
+          "alias": "deepseek-chat"
+        },
+        "usage-router/deepseek/deepseek-reasoner": {
+          "alias": "deepseek-reasoner"
+        },
+        "usage-router/google/gemini-2.5-flash": {
+          "alias": "gemini-2.5-flash"
+        },
+        "usage-router/google/gemini-2.5-flash-lite": {
+          "alias": "gemini-2.5-flash-lite"
+        },
+        "usage-router/google/gemini-2.5-pro": {
+          "alias": "gemini-2.5-pro"
+        },
+        "usage-router/google/gemini-3-flash-preview": {
+          "alias": "gemini-3-flash-preview"
+        },
+        "usage-router/google/gemini-3-pro-preview": {
+          "alias": "gemini-3-pro-preview"
+        },
+        "usage-router/google/gemini-3.1-pro-preview": {
+          "alias": "gemini-3.1-pro-preview"
+        },
+        "usage-router/google/gemini-3.1-pro-preview-customtools": {
+          "alias": "gemini-3.1-pro-preview-customtools"
+        },
+        "usage-router/google/gemini-3.1-flash-lite-preview": {
+          "alias": "gemini-3.1-flash-lite-preview"
+        },
+        "usage-router/google/gemini-pro-latest": {
+          "alias": "gemini-pro-latest"
+        },
+        "usage-router/google/gemini-flash-latest": {
+          "alias": "gemini-flash-latest"
+        },
+        "usage-router/google/gemini-flash-lite-latest": {
+          "alias": "gemini-flash-lite-latest"
+        },
+        "usage-router/google/gemini-2.0-flash": {
+          "alias": "gemini-2.0-flash"
+        },
+        "usage-router/google/gemini-2.0-flash-001": {
+          "alias": "gemini-2.0-flash-001"
+        },
+        "usage-router/google/gemini-2.0-flash-lite": {
+          "alias": "gemini-2.0-flash-lite"
+        },
+        "usage-router/google/gemini-2.0-flash-lite-001": {
+          "alias": "gemini-2.0-flash-lite-001"
+        },
+        "usage-router/google/gemini-embedding-001": {
+          "alias": "gemini-embedding-001"
+        },
+        "usage-router/google/gemini-embedding-2-preview": {
+          "alias": "gemini-embedding-2-preview"
+        },
+        "usage-router/google/gemini-2.5-flash-image": {
+          "alias": "gemini-2.5-flash-image"
+        },
+        "usage-router/google/gemini-3-pro-image-preview": {
+          "alias": "gemini-3-pro-image-preview"
+        },
+        "usage-router/google/gemini-3.1-flash-image-preview": {
+          "alias": "gemini-3.1-flash-image-preview"
+        },
+        "usage-router/google/nano-banana-pro-preview": {
+          "alias": "nano-banana-pro-preview"
+        },
+        "usage-router/google/gemini-2.5-flash-preview-tts": {
+          "alias": "gemini-2.5-flash-preview-tts"
+        },
+        "usage-router/google/gemini-2.5-pro-preview-tts": {
+          "alias": "gemini-2.5-pro-preview-tts"
+        },
+        "usage-router/google/gemini-3.1-flash-tts-preview": {
+          "alias": "gemini-3.1-flash-tts-preview"
+        },
+        "usage-router/google/gemini-2.5-flash-native-audio-latest": {
+          "alias": "gemini-2.5-flash-native-audio-latest"
+        },
+        "usage-router/google/gemini-2.5-flash-native-audio-preview-09-2025": {
+          "alias": "gemini-2.5-flash-native-audio-preview-09-2025"
+        },
+        "usage-router/google/lyria-3-clip-preview": {
+          "alias": "lyria-3-clip-preview"
+        },
+        "usage-router/google/lyria-3-pro-preview": {
+          "alias": "lyria-3-pro-preview"
+        },
+        "usage-router/google/veo-2.0-generate-001": {
+          "alias": "veo-2.0-generate-001"
+        },
+        "usage-router/google/veo-3.0-generate-001": {
+          "alias": "veo-3.0-generate-001"
+        },
+        "usage-router/google/veo-3.0-fast-generate-001": {
+          "alias": "veo-3.0-fast-generate-001"
+        },
+        "usage-router/google/veo-3.1-generate-preview": {
+          "alias": "veo-3.1-generate-preview"
+        },
+        "usage-router/google/veo-3.1-fast-generate-preview": {
+          "alias": "veo-3.1-fast-generate-preview"
+        },
+        "usage-router/google/veo-3.1-lite-generate-preview": {
+          "alias": "veo-3.1-lite-generate-preview"
+        },
+        "usage-router/google/imagen-4.0-generate-001": {
+          "alias": "imagen-4.0-generate-001"
+        },
+        "usage-router/google/imagen-4.0-fast-generate-001": {
+          "alias": "imagen-4.0-fast-generate-001"
+        },
+        "usage-router/google/imagen-4.0-ultra-generate-001": {
+          "alias": "imagen-4.0-ultra-generate-001"
+        },
+        "usage-router/google/gemini-2.5-computer-use-preview-10-2025": {
+          "alias": "gemini-2.5-computer-use-preview-10-2025"
+        },
+        "usage-router/google/gemini-robotics-er-1.5-preview": {
+          "alias": "gemini-robotics-er-1.5-preview"
+        },
+        "usage-router/google/gemini-robotics-er-1.6-preview": {
+          "alias": "gemini-robotics-er-1.6-preview"
+        },
+        "usage-router/google/deep-research-pro-preview-12-2025": {
+          "alias": "deep-research-pro-preview-12-2025"
+        },
+        "usage-router/google/aqa": {
+          "alias": "aqa"
+        },
+        "usage-router/google/gemma-3-1b-it": {
+          "alias": "gemma-3-1b-it"
+        },
+        "usage-router/google/gemma-3-4b-it": {
+          "alias": "gemma-3-4b-it"
+        },
+        "usage-router/google/gemma-3-12b-it": {
+          "alias": "gemma-3-12b-it"
+        },
+        "usage-router/google/gemma-3-27b-it": {
+          "alias": "gemma-3-27b-it"
+        },
+        "usage-router/google/gemma-3n-e2b-it": {
+          "alias": "gemma-3n-e2b-it"
+        },
+        "usage-router/google/gemma-3n-e4b-it": {
+          "alias": "gemma-3n-e4b-it"
+        },
+        "usage-router/google/gemma-4-26b-a4b-it": {
+          "alias": "gemma-4-26b-a4b-it"
+        },
+        "usage-router/google/gemma-4-31b-it": {
+          "alias": "gemma-4-31b-it"
+        },
+        "usage-router/ollama/gemma4:e2b": {
+          "alias": "gemma4:e2b"
+        },
+        "usage-router/ollama/qwen3-embedding:0.6b": {
+          "alias": "qwen3-embedding:0.6b"
+        },
+        "usage-router/openrouter/openai/gpt-5-mini": {
+          "alias": "gpt-5-mini"
+        }
       }
     },
     "list": [
       {
         "id": "default",
         "default": true,
-        "workspace": "~/.openclaw/workspace"
+        "workspace": "~/.openclaw/workspace",
+        "subagents": {
+          "allowAgents": ["librarian"]
+        }
       },
       {
         "id": "usell",
@@ -125,8 +440,7 @@
       {
         "id": "librarian",
         "name": "Librarian",
-        "workspace": "/vault",
-        "systemPrompt": "You have access to the Obsidian vault at /vault via the obsidian MCP. On every session start, read /vault/3000-Agents/Librarian_SOP.md for your operating instructions. Check /vault/4000-Inbox for new .md files and process them per the SOP."
+        "workspace": "/vault"
       }
     ]
   },
@@ -135,7 +449,10 @@
       "agentId": "default",
       "match": {
         "channel": "whatsapp",
-        "peer": { "kind": "direct", "id": "5541999159953" }
+        "peer": {
+          "kind": "direct",
+          "id": "5541999159953"
+        }
       }
     },
     {
@@ -152,7 +469,9 @@
     "internal": {
       "enabled": true,
       "entries": {
-        "github-push": { "enabled": true }
+        "github-push": {
+          "enabled": true
+        }
       }
     }
   }

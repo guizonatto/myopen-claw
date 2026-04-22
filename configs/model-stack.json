@@ -1,0 +1,163 @@
+{
+  "version": "2026-04-16",
+  "policy": {
+    "lanes": [
+      {
+        "id": "groq_free",
+        "label": "Groq (free)",
+        "models": [
+          "groq/llama-3.1-8b-instant",
+          "groq/openai/gpt-oss-20b",
+          "groq/openai/gpt-oss-safeguard-20b",
+          "groq/qwen/qwen3-32b",
+          "groq/openai/gpt-oss-120b",
+          "groq/llama-3.3-70b-versatile",
+          "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+        ]
+      },
+      {
+        "id": "mistral_free",
+        "label": "Mistral (free)",
+        "models": [
+          "mistral/mistral-large-latest",
+          "mistral/mistral-medium-2508",
+          "mistral/mistral-small-latest",
+          "mistral/pixtral-large-latest",
+          "mistral/codestral-latest",
+          "mistral/devstral-medium-latest",
+          "mistral/magistral-small-latest"
+        ]
+      },
+      {
+        "id": "cerebras_free",
+        "label": "Cerebras (free)",
+        "models": [
+          "cerebras/llama3.1-8b",
+          "cerebras/qwen-3-235b-a22b-instruct-2507",
+          "cerebras/qwen-3-235b-2507",
+          "cerebras/gpt-oss-120b"
+        ]
+      },
+      {
+        "id": "qwen_paid",
+        "label": "Qwen (paid)",
+        "models": [
+          "qwen/qwen3.5-flash",
+          "qwen/qwen3.5-plus"
+        ]
+      },
+      {
+        "id": "deepseek_paid",
+        "label": "DeepSeek (paid)",
+        "models": [
+          "deepseek/deepseek-chat",
+          "deepseek/deepseek-reasoner"
+        ]
+      },
+      {
+        "id": "google_paid",
+        "label": "Google Gemini (AI Studio)",
+        "models": [
+          "google/gemini-2.5-flash",
+          "google/gemini-2.5-flash-lite",
+          "google/gemini-2.5-pro",
+          "google/gemini-3-flash-preview",
+          "google/gemini-3-pro-preview",
+          "google/gemini-3.1-pro-preview",
+          "google/gemini-3.1-pro-preview-customtools",
+          "google/gemini-3.1-flash-lite-preview",
+          "google/gemini-pro-latest",
+          "google/gemini-flash-latest",
+          "google/gemini-flash-lite-latest",
+          "google/gemini-2.0-flash",
+          "google/gemini-2.0-flash-001",
+          "google/gemini-2.0-flash-lite",
+          "google/gemini-2.0-flash-lite-001"
+        ]
+      },
+      {
+        "id": "google_multimodal_extras",
+        "label": "Google (extras: image/audio/video/embedding)",
+        "includeInChain": false,
+        "models": [
+          "google/gemini-embedding-001",
+          "google/gemini-embedding-2-preview",
+          "google/gemini-2.5-flash-image",
+          "google/gemini-3-pro-image-preview",
+          "google/gemini-3.1-flash-image-preview",
+          "google/nano-banana-pro-preview",
+          "google/gemini-2.5-flash-preview-tts",
+          "google/gemini-2.5-pro-preview-tts",
+          "google/gemini-3.1-flash-tts-preview",
+          "google/gemini-2.5-flash-native-audio-latest",
+          "google/gemini-2.5-flash-native-audio-preview-09-2025",
+          "google/lyria-3-clip-preview",
+          "google/lyria-3-pro-preview",
+          "google/veo-2.0-generate-001",
+          "google/veo-3.0-generate-001",
+          "google/veo-3.0-fast-generate-001",
+          "google/veo-3.1-generate-preview",
+          "google/veo-3.1-fast-generate-preview",
+          "google/veo-3.1-lite-generate-preview",
+          "google/imagen-4.0-generate-001",
+          "google/imagen-4.0-fast-generate-001",
+          "google/imagen-4.0-ultra-generate-001",
+          "google/gemini-2.5-computer-use-preview-10-2025",
+          "google/gemini-robotics-er-1.5-preview",
+          "google/gemini-robotics-er-1.6-preview",
+          "google/deep-research-pro-preview-12-2025",
+          "google/aqa",
+          "google/gemma-3-1b-it",
+          "google/gemma-3-4b-it",
+          "google/gemma-3-12b-it",
+          "google/gemma-3-27b-it",
+          "google/gemma-3n-e2b-it",
+          "google/gemma-3n-e4b-it",
+          "google/gemma-4-26b-a4b-it",
+          "google/gemma-4-31b-it"
+        ]
+      },
+      {
+        "id": "ollama_local_extras",
+        "label": "Ollama (local: memclaw/cortex-mem)",
+        "includeInChain": false,
+        "models": [
+          "ollama/gemma4:e2b",
+          "ollama/qwen3-embedding:0.6b"
+        ]
+      },
+      {
+        "id": "openrouter_paid_escape",
+        "label": "OpenRouter (paid escape)",
+        "models": [
+          "openrouter/openai/gpt-5-mini"
+        ]
+      }
+    ]
+  },
+  "skillModelPins": {
+    "business-monitor": "usage-router/groq/llama-3.1-8b-instant",
+    "business_monitor": "usage-router/groq/llama-3.1-8b-instant",
+    "curadoria-temas-diarios": "usage-router/mistral/mistral-medium-2508",
+    "edital_monitor": "usage-router/mistral/mistral-large-latest",
+    "politics_economy_monitor": "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
+    "reddit_digest": "usage-router/groq/llama-3.1-8b-instant",
+    "reddit-digest": "usage-router/cerebras/gpt-oss-120b",
+    "trends": "usage-router/groq/llama-3.1-8b-instant",
+
+    "crm": "usage-router/groq/openai/gpt-oss-20b",
+    "shopping-tracker": "usage-router/groq/openai/gpt-oss-20b",
+    "vault": "usage-router/groq/llama-3.1-8b-instant",
+    "x-trending": "usage-router/groq/openai/gpt-oss-20b",
+    "fetch-trending-topics": "usage-router/groq/openai/gpt-oss-20b",
+
+    "sindico-leads": "usage-router/groq/qwen/qwen3-32b",
+    "github-weekly-summary": "usage-router/mistral/devstral-medium-latest",
+
+    "daily-content-creator": "usage-router/mistral/mistral-small-latest",
+    "humanizer": "usage-router/mistral/mistral-small-latest",
+    "weekly-michelin-meal-plan": "usage-router/mistral/mistral-small-latest",
+    "usell-sales-workflow": "usage-router/mistral/mistral-small-latest",
+    "tech-news-digest": "usage-router/mistral/mistral-large-latest"
+  }
+}

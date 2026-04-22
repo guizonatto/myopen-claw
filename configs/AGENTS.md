@@ -8,8 +8,23 @@ If BOOTSTRAP.md exists, that’s your birth certificate. Follow it, figure out w
 ​
 Session Startup
 Before doing anything else:
-Read SOUL.md — this is who you are
-Read USER.md — this is who you’re helping
+- SOUL.md (core instructions)
+- USER.md (my profile)
+- IDENTITY.md (agent identity)
+- Today's memory file only
+
+Do NOT load:
+- Full conversation history
+- Old MEMORY.md files
+- Previous session outputs
+
+When I ask about the past:
+- Search memory on-demand
+- Pull specific pieces, not everything
+
+At session end:
+- Save today's summary to dated file
+- Include: tasks done, decisions made, blockers, next steps
 Read memory/YYYY-MM-DD.md (today + yesterday) for recent context
 If in MAIN SESSION (direct chat with your human): Also read MEMORY.md
 Don’t ask permission. Just do it.
@@ -67,6 +82,13 @@ O vault está montado em `/vault`. Use o MCP `obsidian` para todas as operaçõe
 - Decisão importante → `create_note "2000-Knowledge/<título>"` via MCP obsidian
 - Resumo/conversa → `create_note "4000-Inbox/<título>"` para o Librarian processar
 - Aprendizado duradouro → vault é mais permanente que cortex-mem
+
+### Indexação e catalogação de conhecimento — delegar ao Librarian
+Nunca indexe, cataloge ou mova notas do vault por conta própria.
+Quando precisar realizar qualquer operação de indexação ou catalogação de conhecimento no vault, spawn o agente `librarian`:
+- O Librarian lê `/vault/3000-Agents/Librarian_SOP.md` como instrução canônica de como organizar o vault.
+- Exemplos de quando spawnar o Librarian: processar inbox, reorganizar notas, criar índices, extrair conhecimento de conversas para o vault.
+- Nunca faça essas operações diretamente — o Librarian tem o SOP correto e evita erros de catalogação.
 
 ### Hierarquia de memória (qual usar quando)
 
@@ -376,3 +398,15 @@ Nunca criar arquivos de lógica de negócio em `openclaw/` — esse diretório �
 - Registrar aprendizados importantes com `add_memory(tipo, conteudo)`.
 - Consultar memória com `get_memory()` antes de repetir tarefas já executadas.
 - Tipos de memória: `observacao`, `repo_rule`, `code_rule`, `alerta`, `follow_up`.
+
+RATE LIMITS:
+
+- Minimum 5 seconds between API calls
+- Minimum 10 seconds between web searches
+- Max 5 searches in a row, then 2-minute cooldown
+- Batch similar work (one request, not ten)
+- On rate limit error: stop, wait 5 minutes, retry
+
+BUDGET CAPS:
+Daily max: $5 (warn at $4)
+Monthly max: $180 (warn at $140)
