@@ -136,22 +136,22 @@
     ]
   },
   "skillModelPins": {
-    "business-monitor": "usage-router/groq/llama-3.1-8b-instant",
-    "business_monitor": "usage-router/groq/llama-3.1-8b-instant",
+    "business-monitor": "usage-router/cerebras/llama3.1-8b",
+    "business_monitor": "usage-router/cerebras/llama3.1-8b",
     "curadoria-temas-diarios": "usage-router/mistral/mistral-medium-2508",
     "edital_monitor": "usage-router/mistral/mistral-large-latest",
     "politics_economy_monitor": "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
-    "reddit_digest": "usage-router/groq/llama-3.1-8b-instant",
+    "reddit_digest": "usage-router/cerebras/llama3.1-8b",
     "reddit-digest": "usage-router/cerebras/gpt-oss-120b",
-    "trends": "usage-router/groq/llama-3.1-8b-instant",
+    "trends": "usage-router/cerebras/llama3.1-8b",
 
-    "crm": "usage-router/groq/openai/gpt-oss-20b",
-    "shopping-tracker": "usage-router/groq/openai/gpt-oss-20b",
-    "vault": "usage-router/groq/llama-3.1-8b-instant",
-    "x-trending": "usage-router/groq/openai/gpt-oss-20b",
-    "fetch-trending-topics": "usage-router/groq/openai/gpt-oss-20b",
+    "crm": "usage-router/cerebras/gpt-oss-120b",
+    "shopping-tracker": "usage-router/cerebras/gpt-oss-120b",
+    "vault": "usage-router/cerebras/llama3.1-8b",
+    "x-trending": "usage-router/cerebras/gpt-oss-120b",
+    "fetch-trending-topics": "usage-router/cerebras/gpt-oss-120b",
 
-    "sindico-leads": "usage-router/groq/qwen/qwen3-32b",
+    "sindico-leads": "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
     "github-weekly-summary": "usage-router/mistral/devstral-medium-latest",
 
     "daily-content-creator": "usage-router/mistral/mistral-small-latest",
