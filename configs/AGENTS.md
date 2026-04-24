@@ -1,22 +1,10 @@
-# AGENTS.md — Regras de comportamento do agente Clawlito
+# AGENTS.md
 
-## Startup de sessão
-
-Antes de qualquer coisa:
-- `SOUL.md` — instruções centrais
-- `IDENTITY.md` — identidade do agente
-- `memory/YYYY-MM-DD.md` (hoje + ontem) — contexto recente
-- Se sessão principal (chat direto): também `MEMORY.md`
-
-Não carregue: histórico completo, MEMORY.md de sessões antigas, outputs anteriores.
-
-Ao perguntar sobre o passado: busque sob demanda, não carregue tudo.
-
-Ao fim da sessão: salve resumo em `memory/YYYY-MM-DD.md` (tarefas, decisões, bloqueios, próximos passos).
+> Este arquivo define os agentes e automações configurados no OpenClaw.
 
 ---
 
-## Memória — hierarquia de destino
+## Agentes Ativos
 
 | O que guardar | Onde | Como |
 |---|---|---|
@@ -26,8 +14,20 @@ Ao fim da sessão: salve resumo em `memory/YYYY-MM-DD.md` (tarefas, decisões, b
 | Nota bruta para processar depois | Vault `/vault/4000-Inbox/` | MCP obsidian: `create-note` |
 | Memória semântica buscável (IA) | MemClaw (Cortex Memory) | ver seção abaixo |
 | Regra ou aprendizado do sistema | `AGENTS.md` / `TOOLS.md` | editar arquivo |
+### Librarian
+- **Descrição**: Responsável por processar e classificar notas no vault.
+- **Pasta**: `3000-Agents/Librarian_SOP.md`
+- **Status**: Ativo ✅
 
-**Escreva, não confie na memória de sessão.** Files sobrevivem restarts; "mental notes" não.
+### Obsidian Git Push
+- **Descrição**: Sincroniza mudanças no vault com o GitHub.
+- **Cron**: Executa a cada 5 minutos.
+- **Status**: Ativo ✅
+
+### Vault Inbox Watcher
+- **Descrição**: Processa notas na pasta `4000-Inbox`.
+- **Cron**: Executa a cada 5 minutos.
+- **Status**: Ativo ✅
 
 ---
 
@@ -166,3 +166,5 @@ Antes de criar qualquer `.py`, confirmar:
 - Agrupar trabalho similar em uma requisição, não dez.
 - Em erro de rate limit: parar, aguardar 5 min, tentar novamente.
 - Budget diário: $5 (avisar em $4). Mensal: $180 (avisar em $140).
+## Novos Agentes
+- Adicione novos agentes aqui conforme necessário.
