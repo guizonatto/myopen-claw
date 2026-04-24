@@ -16,6 +16,9 @@ ONBOARD_HASH_FILE="$CONFIG_DIR/.onboard_version"
 USER_VERSION_FILE="$CONFIG_DIR/.user_version"
 CRON_HASH_FILE="$CONFIG_DIR/.cron_version"
 SKILLS_SYNC_HASH_FILE="$CONFIG_DIR/.skills_sync_version"
+OBSIDIAN_MCP_VERSION_DEFAULT="1.0.6"
+OBSIDIAN_MCP_VERSION_VALUE="${OBSIDIAN_MCP_VERSION:-$OBSIDIAN_MCP_VERSION_DEFAULT}"
+OPENCLAW_ONBOARD_MODE_VALUE="$(echo "${OPENCLAW_ONBOARD_MODE:-once}" | tr '[:upper:]' '[:lower:]')"
 
 mkdir -p "$CONFIG_DIR" "$WORKSPACE_DIR" "$CONFIG_DIR/hooks"
 mkdir -p "$CONFIG_DIR/extensions"
@@ -25,6 +28,18 @@ mkdir -p "$CONFIG_DIR/extensions"
 chmod -R go-w "$CONFIG_DIR/extensions" 2>/dev/null || true
 find "$CONFIG_DIR/extensions" -type d -exec chmod 755 {} \; 2>/dev/null || true
 find "$CONFIG_DIR/extensions" -type f -exec chmod 644 {} \; 2>/dev/null || true
+
+sync_agent_workspaces() {
+    for agent in leads content intel ops researcher sales-sim sindico-sim sim-control; do
+        local src="$APP_ROOT/agents/${agent}"
+        local dst="$CONFIG_DIR/workspace-${agent}"
+        [ -d "$src" ] || continue
+        mkdir -p "$dst"
+        for f in SOUL.md AGENTS.md IDENTITY.md TOOLS.md; do
+            [ -f "$src/$f" ] && cp "$src/$f" "$dst/$f"
+        done
+    done
+}
 
 sync_runtime_stack_assets() {
     mkdir -p "$WORKSPACE_DIR/configs" "$WORKSPACE_DIR/scripts"
@@ -42,6 +57,25 @@ sync_runtime_stack_assets() {
     if [ -f "$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs" ]; then
         cp "$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs" "$WORKSPACE_DIR/scripts/apply-model-stack.mjs"
     fi
+}
+
+sync_versioned_cron_assets() {
+    local source_cron_dir="$SOURCE_WORKSPACE/crons"
+    local target_cron_dir="$WORKSPACE_DIR/crons"
+
+    if [ ! -d "$source_cron_dir" ]; then
+        return 0
+    fi
+
+    mkdir -p "$target_cron_dir"
+
+    for source_file in "$source_cron_dir"/*.cron.md; do
+        [ -f "$source_file" ] || continue
+        local target_file="$target_cron_dir/$(basename "$source_file")"
+        if [ ! -f "$target_file" ] || ! cmp -s "$source_file" "$target_file"; then
+            cp "$source_file" "$target_file"
+        fi
+    done
 }
 
 apply_runtime_model_stack() {
@@ -81,44 +115,130 @@ sync_llm_metrics_proxy_model_limits() {
 init_obsidian_vault() {
     local vault_dir="${OBSIDIAN_VAULT_PATH:-/vault}"
     local obsidian_repo="${OBSIDIAN_GIT_REPO:-}"
+    local obsidian_mcp_pkg="obsidian-mcp@${OBSIDIAN_MCP_VERSION_VALUE}"
+
+    ensure_obsidian_vault_initialized() {
+        local target_dir="$1"
+        local obsidian_dir="$target_dir/.obsidian"
+        local app_json="$obsidian_dir/app.json"
+
+        if [ -e "$obsidian_dir" ] && [ ! -d "$obsidian_dir" ]; then
+            echo " !!! [VAULT] $obsidian_dir existe, mas não é diretório."
+            return 1
+        fi
+
+        if [ ! -d "$obsidian_dir" ]; then
+            echo " >>> [VAULT] .obsidian ausente — criando estrutura mínima."
+            mkdir -p "$obsidian_dir"
+        fi
+
+        if [ -e "$app_json" ] && [ ! -f "$app_json" ]; then
+            echo " !!! [VAULT] $app_json existe, mas não é arquivo regular."
+            return 1
+        fi
+
+        if [ ! -f "$app_json" ]; then
+            echo " >>> [VAULT] app.json ausente — criando arquivo mínimo."
+            printf '{}\n' > "$app_json"
+        fi
+    }
+
+    validate_obsidian_mcp_vault() {
+        local target_dir="$1"
+        local smoke_log="/tmp/obsidian-mcp-smoke.log"
+        local rc=0
+        local smoke_timeout="${OBSIDIAN_MCP_SMOKE_TIMEOUT_SECONDS:-45}"
+
+        run_obsidian_smoke() {
+            rc=0
+            rm -f "$smoke_log"
+            if command -v timeout >/dev/null 2>&1; then
+                timeout "${smoke_timeout}s" npx -y "$obsidian_mcp_pkg" "$target_dir" > "$smoke_log" 2>&1 || rc=$?
+            else
+                npx -y "$obsidian_mcp_pkg" "$target_dir" > "$smoke_log" 2>&1 &
+                local pid=$!
+                sleep "$smoke_timeout"
+                kill "$pid" >/dev/null 2>&1 || true
+                wait "$pid" >/dev/null 2>&1 || rc=$?
+            fi
+        }
+
+        run_obsidian_smoke
+        if [ "$rc" != "0" ] && [ "$rc" != "124" ] && [ "$rc" != "143" ] && grep -q "Could not read package.json" "$smoke_log"; then
+            echo " >>> [VAULT] Cache npx inconsistente detectado — limpando _npx e repetindo smoke test."
+            rm -rf /root/.npm/_npx >/dev/null 2>&1 || true
+            run_obsidian_smoke
+        fi
+
+        if [ "$rc" != "0" ] && [ "$rc" != "124" ] && [ "$rc" != "143" ]; then
+            echo " !!! [VAULT] Smoke test do $obsidian_mcp_pkg falhou (exit=$rc)."
+            tail -n 60 "$smoke_log" 2>/dev/null || true
+            return 1
+        fi
+
+        if ! grep -q "Server initialized successfully" "$smoke_log"; then
+            echo " !!! [VAULT] Smoke test não confirmou inicialização do servidor MCP."
+            tail -n 60 "$smoke_log" 2>/dev/null || true
+            return 1
+        fi
+
+        for required_tool in read-note create-note edit-note move-note search-vault add-tags remove-tags; do
+            if ! grep -q "Registering tool: $required_tool" "$smoke_log"; then
+                echo " !!! [VAULT] Tool obrigatória não registrada no smoke test: $required_tool"
+                tail -n 60 "$smoke_log" 2>/dev/null || true
+                return 1
+            fi
+        done
+
+        echo " >>> [VAULT] Smoke test do $obsidian_mcp_pkg concluído com sucesso."
+    }
 
     if [ -z "$obsidian_repo" ]; then
         echo " >>> [VAULT] OBSIDIAN_GIT_REPO não definido — sincronização git do vault desabilitada."
-        return 0
-    fi
-
-    # Inject GITHUB_TOKEN into URL for auth
-    local remote_url="$obsidian_repo"
-    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$obsidian_repo" | grep -q "github.com"; then
-        remote_url="$(echo "$obsidian_repo" | sed "s|https://github.com/|https://${GITHUB_TOKEN}@github.com/|")"
-    fi
-
-    mkdir -p "$vault_dir"
-
-    if [ ! -d "$vault_dir/.git" ]; then
-        # Check if the directory has existing content (e.g. local vault files)
-        if [ -n "$(ls -A "$vault_dir" 2>/dev/null)" ]; then
-            echo " >>> [VAULT] Vault tem conteúdo local — inicializando git e conectando ao remoto..."
-            git -C "$vault_dir" init -b main 2>/dev/null || git -C "$vault_dir" init
-            git -C "$vault_dir" remote add origin "$remote_url"
-            git -C "$vault_dir" fetch origin main --depth=1 2>&1 | tail -3 || true
-            # Merge remote into local without overwriting (allow unrelated histories)
-            git -C "$vault_dir" merge --allow-unrelated-histories -m "vault: merge remote on init" FETCH_HEAD 2>&1 | tail -5 || true
-        else
-            echo " >>> [VAULT] Clonando vault Obsidian de $obsidian_repo..."
-            if ! git clone "$remote_url" "$vault_dir" 2>&1 | tail -3; then
-                echo " !!! [VAULT] Falha ao clonar vault — verifique OBSIDIAN_GIT_REPO e GITHUB_TOKEN."
-                return 0
-            fi
-        fi
-        git -C "$vault_dir" config user.email "${GIT_USER_EMAIL:-openclaw-bot@noreply}"
-        git -C "$vault_dir" config user.name "${GIT_USER_NAME:-OpenClaw Bot}"
-        echo " >>> [VAULT] Vault git inicializado em $vault_dir."
+        mkdir -p "$vault_dir"
     else
-        echo " >>> [VAULT] Vault git já existe em $vault_dir — atualizando remote URL."
-        git -C "$vault_dir" remote set-url origin "$remote_url" 2>/dev/null || true
-        git -C "$vault_dir" config user.email "${GIT_USER_EMAIL:-openclaw-bot@noreply}"
-        git -C "$vault_dir" config user.name "${GIT_USER_NAME:-OpenClaw Bot}"
+        # Inject GITHUB_TOKEN into URL for auth
+        local remote_url="$obsidian_repo"
+        if [ -n "${GITHUB_TOKEN:-}" ] && echo "$obsidian_repo" | grep -q "github.com"; then
+            remote_url="$(echo "$obsidian_repo" | sed "s|https://github.com/|https://${GITHUB_TOKEN}@github.com/|")"
+        fi
+
+        mkdir -p "$vault_dir"
+
+        if [ ! -d "$vault_dir/.git" ]; then
+            # Check if the directory has existing content (e.g. local vault files)
+            if [ -n "$(ls -A "$vault_dir" 2>/dev/null)" ]; then
+                echo " >>> [VAULT] Vault tem conteúdo local — inicializando git e conectando ao remoto..."
+                git -C "$vault_dir" init -b main 2>/dev/null || git -C "$vault_dir" init
+                git -C "$vault_dir" remote add origin "$remote_url"
+                git -C "$vault_dir" fetch origin main --depth=1 2>&1 | tail -3 || true
+                # Merge remote into local without overwriting (allow unrelated histories)
+                git -C "$vault_dir" merge --allow-unrelated-histories -m "vault: merge remote on init" FETCH_HEAD 2>&1 | tail -5 || true
+            else
+                echo " >>> [VAULT] Clonando vault Obsidian de $obsidian_repo..."
+                if ! git clone "$remote_url" "$vault_dir" 2>&1 | tail -3; then
+                    echo " !!! [VAULT] Falha ao clonar vault — verifique OBSIDIAN_GIT_REPO e GITHUB_TOKEN."
+                fi
+            fi
+            git -C "$vault_dir" config user.email "${GIT_USER_EMAIL:-openclaw-bot@noreply}"
+            git -C "$vault_dir" config user.name "${GIT_USER_NAME:-OpenClaw Bot}"
+            echo " >>> [VAULT] Vault git inicializado em $vault_dir."
+        else
+            echo " >>> [VAULT] Vault git já existe em $vault_dir — atualizando remote URL."
+            git -C "$vault_dir" remote set-url origin "$remote_url" 2>/dev/null || true
+            git -C "$vault_dir" config user.email "${GIT_USER_EMAIL:-openclaw-bot@noreply}"
+            git -C "$vault_dir" config user.name "${GIT_USER_NAME:-OpenClaw Bot}"
+        fi
+    fi
+
+    if ! ensure_obsidian_vault_initialized "$vault_dir"; then
+        echo " !!! [VAULT] Falha no bootstrap da estrutura .obsidian."
+        exit 1
+    fi
+
+    if ! validate_obsidian_mcp_vault "$vault_dir"; then
+        echo " !!! [VAULT] Vault inválido para obsidian-mcp mesmo após bootstrap. Abortando startup."
+        exit 1
     fi
 }
 
@@ -169,7 +289,9 @@ seed_bootstrap() {
 }
 
 seed_bootstrap
+sync_agent_workspaces
 sync_runtime_stack_assets
+sync_versioned_cron_assets
 
 reconcile_openclaw_config() {
     local config_path="$CONFIG_DIR/openclaw.json"
@@ -185,6 +307,8 @@ reconcile_openclaw_config() {
     MODEL_USAGE_PROXY_ENABLED_VALUE="${MODEL_USAGE_PROXY_ENABLED:-true}" \
     MODEL_USAGE_PROXY_ROOT_VALUE="${MODEL_USAGE_PROXY_ROOT:-http://llm-metrics-proxy:8080}" \
     MODEL_USAGE_PROXY_TOKEN_VALUE="${MODEL_USAGE_PROXY_TOKEN:-usage-router-local}" \
+    OBSIDIAN_VAULT_PATH_VALUE="${OBSIDIAN_VAULT_PATH:-/vault}" \
+    OBSIDIAN_MCP_VERSION_VALUE="${OBSIDIAN_MCP_VERSION_VALUE}" \
     ZAI_API_BASE_URL_VALUE="${ZAI_API_BASE_URL:-https://api.z.ai/api/paas/v4}" \
     ZAI_API_KEY_VALUE="${ZAI_API_KEY:-}" \
     ZAI_MODEL_VALUE="${ZAI_MODEL:-GLM-4.7}" \
@@ -195,6 +319,11 @@ const fs = require("fs");
 
 const configPath = process.env.CONFIG_PATH;
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const obsidianVaultPathRaw = String(process.env.OBSIDIAN_VAULT_PATH_VALUE || "/vault").trim();
+const obsidianVaultPath = obsidianVaultPathRaw ? obsidianVaultPathRaw : "/vault";
+const obsidianMcpVersionRaw = String(process.env.OBSIDIAN_MCP_VERSION_VALUE || "1.0.6").trim();
+const obsidianMcpVersion = obsidianMcpVersionRaw || "1.0.6";
+const obsidianMcpPackage = `obsidian-mcp@${obsidianMcpVersion}`;
 const rawModel = process.env.ZAI_MODEL_VALUE || "GLM-4.7";
 let llmModel = rawModel;
 
@@ -218,6 +347,25 @@ if (config.models?.providers) {
  config.mcp.servers ??= {};
  delete config.mcp.servers["mcp-memories"];
  delete config.mcp.servers["memories"];
+ // Garantir que o MCP obsidian aponta para o vault correto (default: /vault).
+ // (Algumas instalações antigas apontavam para ~/.openclaw/workspace e criavam um 4000-Inbox duplicado.)
+ const obsidianExisting = config.mcp.servers.obsidian;
+ const obsidianArgs = Array.isArray(obsidianExisting?.args) ? obsidianExisting.args.map((item) => String(item)) : [];
+ const pointsToObsidianMcp =
+   obsidianArgs.includes("obsidian-mcp") ||
+   obsidianArgs.some((item) => item.startsWith("obsidian-mcp@"));
+ const wantsNpxObsidianMcp =
+   !obsidianExisting ||
+   obsidianExisting.command === "npx" ||
+   pointsToObsidianMcp;
+ if (wantsNpxObsidianMcp) {
+   config.mcp.servers.obsidian = {
+     ...(typeof obsidianExisting === "object" && obsidianExisting ? obsidianExisting : {}),
+     command: "npx",
+     args: ["-y", obsidianMcpPackage, obsidianVaultPath],
+     type: "stdio",
+   };
+ }
  // Garantir que o MCP de leads esteja registrado (alguns setups antigos não tinham).
  config.mcp.servers["mcp-leads"] ??= {
    command: "docker",
@@ -281,6 +429,94 @@ config.agents.defaults ??= {};
 config.agents.defaults.memorySearch = { enabled: false };
 // Default model stack is applied by scripts/apply-model-stack.mjs (runs after reconcile).
 config.agents.defaults.model ??= { primary: `ollama/${ollamaModel}`, fallbacks: [] };
+const desiredAgents = [
+  {
+    id: "default",
+    default: true,
+    workspace: "~/.openclaw/workspace",
+    subagents: { allowAgents: ["librarian"] },
+  },
+  {
+    id: "leads",
+    name: "Prospector",
+    workspace: "~/.openclaw/workspace-leads",
+    tools: {
+      allow: ["exec", "read", "cron", "sessions_list"],
+      deny: ["browser", "canvas", "write", "edit"],
+    },
+  },
+  {
+    id: "content",
+    name: "Copywriter",
+    workspace: "~/.openclaw/workspace-content",
+    tools: {
+      allow: ["exec", "read", "web_search", "web_fetch", "browser", "cron"],
+    },
+  },
+  {
+    id: "intel",
+    name: "Sentinel",
+    workspace: "~/.openclaw/workspace-intel",
+    tools: {
+      allow: ["exec", "read", "web_search", "web_fetch", "cron"],
+      deny: ["browser", "canvas"],
+    },
+  },
+  {
+    id: "ops",
+    name: "Steward",
+    workspace: "~/.openclaw/workspace-ops",
+    tools: {
+      allow: ["exec", "read", "cron"],
+      deny: ["browser", "canvas", "write", "edit"],
+    },
+  },
+  {
+    id: "usell",
+    name: "Usell Sales",
+    workspace: "~/.openclaw/workspace",
+    tools: { profile: "messaging" },
+  },
+  {
+    id: "librarian",
+    name: "Librarian",
+    workspace: "/vault",
+  },
+];
+const existingAgents = Array.isArray(config.agents.list) ? config.agents.list : [];
+const existingById = new Map(
+  existingAgents
+    .filter((agent) => agent && typeof agent === "object" && typeof agent.id === "string")
+    .map((agent) => [agent.id, agent]),
+);
+const mergedAgents = [];
+for (const desiredAgent of desiredAgents) {
+  const existingAgent = existingById.get(desiredAgent.id) || {};
+  const mergedAgent = { ...existingAgent, ...desiredAgent };
+  if (desiredAgent.tools) {
+    mergedAgent.tools = { ...(existingAgent.tools || {}), ...desiredAgent.tools };
+  }
+  if (desiredAgent.subagents) {
+    const existingAllow = Array.isArray(existingAgent.subagents?.allowAgents) ? existingAgent.subagents.allowAgents : [];
+    const desiredAllow = Array.isArray(desiredAgent.subagents?.allowAgents) ? desiredAgent.subagents.allowAgents : [];
+    mergedAgent.subagents = {
+      ...(existingAgent.subagents || {}),
+      ...(desiredAgent.subagents || {}),
+      allowAgents: Array.from(new Set([...existingAllow, ...desiredAllow])),
+    };
+  }
+  mergedAgents.push(mergedAgent);
+  existingById.delete(desiredAgent.id);
+}
+for (const leftover of existingById.values()) {
+  mergedAgents.push(leftover);
+}
+for (const agent of mergedAgents) {
+  if (agent && typeof agent === "object" && typeof agent.id === "string") {
+    agent.default = agent.id === "default";
+  }
+}
+config.agents.list = mergedAgents;
   config.tools ??= {};
   config.tools.web ??= {};
   config.tools.web.fetch ??= {};
@@ -322,6 +558,51 @@ if (process.env.TAVILY_API_KEY) {
   config.skills.entries["tech-news-digest"].env.WEB_SEARCH_BACKEND = "tavily";
 } else {
   delete config.skills.entries["tech-news-digest"].env.WEB_SEARCH_BACKEND;
+}
+
+config.channels ??= {};
+if (String(process.env.DISCORD_BOT_TOKEN || "").trim()) {
+  const discordGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
+  const discordChannelId = String(process.env.DISCORD_ZIND_CONTENT_CHANNEL_ID || process.env.DISCORD_CHANNEL_ID || "").trim();
+  config.channels.discord ??= {};
+  config.channels.discord.enabled = true;
+  config.channels.discord.token = { source: "env", provider: "default", id: "DISCORD_BOT_TOKEN" };
+  config.channels.discord.allowFrom = ["*"];
+  config.channels.discord.dmPolicy = "open";
+  config.channels.discord.groupPolicy ??= "open";
+
+  if (discordGuildId) {
+    config.channels.discord.guilds ??= {};
+    const guildEntry =
+      typeof config.channels.discord.guilds[discordGuildId] === "object" && config.channels.discord.guilds[discordGuildId]
+        ? config.channels.discord.guilds[discordGuildId]
+        : {};
+    guildEntry.requireMention = false;
+
+    if (discordChannelId) {
+      guildEntry.channels ??= {};
+      const channelEntry =
+        typeof guildEntry.channels[discordChannelId] === "object" && guildEntry.channels[discordChannelId]
+          ? guildEntry.channels[discordChannelId]
+          : {};
+      channelEntry.requireMention = false;
+      guildEntry.channels[discordChannelId] = channelEntry;
+    }
+
+    config.channels.discord.guilds[discordGuildId] = guildEntry;
+  }
+}
+
+if (config.channels?.discord?.guilds && typeof config.channels.discord.guilds === "object") {
+  for (const guildEntry of Object.values(config.channels.discord.guilds)) {
+    if (!guildEntry || typeof guildEntry !== "object") continue;
+    if (!guildEntry.channels || typeof guildEntry.channels !== "object") continue;
+    for (const channelEntry of Object.values(guildEntry.channels)) {
+      if (channelEntry && typeof channelEntry === "object") {
+        delete channelEntry.allowed;
+      }
+    }
+  }
 }
 
 config.gateway ??= {};
@@ -389,15 +670,40 @@ if [ -f "$ONBOARD_HASH_FILE" ]; then
 fi
 
 NEEDS_ONBOARDING=0
-if [ "$USER_VERSION" != "$PREV_USER_VERSION" ]; then
-    echo "USER.md version changed. Forcando onboarding..."
-    NEEDS_ONBOARDING=1
-elif [ "$CURRENT_HASH" != "$PREV_HASH" ]; then
-    echo "Onboarding changes detected. Rodando onboarding..."
-    NEEDS_ONBOARDING=1
-else
-    echo "No onboarding changes detected. Skipping onboarding."
-fi
+case "$OPENCLAW_ONBOARD_MODE_VALUE" in
+    once|first|first-boot)
+        if [ ! -f "$USER_VERSION_FILE" ] || [ ! -f "$ONBOARD_HASH_FILE" ]; then
+            echo "Onboarding mode=once and markers missing. Running onboarding once..."
+            NEEDS_ONBOARDING=1
+        else
+            echo "Onboarding mode=once and markers found. Skipping onboarding."
+        fi
+        ;;
+    auto|hash)
+        if [ "$USER_VERSION" != "$PREV_USER_VERSION" ]; then
+            echo "USER.md version changed. Forcing onboarding (mode=auto)..."
+            NEEDS_ONBOARDING=1
+        elif [ "$CURRENT_HASH" != "$PREV_HASH" ]; then
+            echo "Onboarding changes detected. Running onboarding (mode=auto)..."
+            NEEDS_ONBOARDING=1
+        else
+            echo "No onboarding changes detected (mode=auto). Skipping onboarding."
+        fi
+        ;;
+    force|always)
+        echo "Onboarding mode=force. Running onboarding."
+        NEEDS_ONBOARDING=1
+        ;;
+    off|disabled|never|manual)
+        echo "Onboarding mode=$OPENCLAW_ONBOARD_MODE_VALUE. Skipping onboarding."
+        ;;
+    *)
+        echo "Unknown OPENCLAW_ONBOARD_MODE='$OPENCLAW_ONBOARD_MODE_VALUE'. Using mode=once fallback."
+        if [ ! -f "$USER_VERSION_FILE" ] || [ ! -f "$ONBOARD_HASH_FILE" ]; then
+            NEEDS_ONBOARDING=1
+        fi
+        ;;
+esac
 
 EVOLUTION_PLUGIN_DIR="/root/.openclaw/extensions/evolution"
 EVOLUTION_PLUGIN_TGZ="/app/plugins/guizonatto-evolution-plugin-1.0.0.tgz"
@@ -623,7 +929,14 @@ if [ "$NEEDS_ONBOARDING" = "1" ]; then
             --ref-provider default --ref-source env --ref-id DISCORD_BOT_TOKEN
         node "$APP_ROOT/dist/index.js" config set channels.discord.enabled true --strict-json
         node "$APP_ROOT/dist/index.js" config set channels.discord.allowFrom '["*"]' --strict-json
-        node "$APP_ROOT/dist/index.js" config set channels.discord.dmPolicy "open" --strict-json
+        node "$APP_ROOT/dist/index.js" config set channels.discord.dmPolicy '"open"' --strict-json
+        node "$APP_ROOT/dist/index.js" config set channels.discord.groupPolicy '"open"' --strict-json
+        if [ -n "${DISCORD_GUILD_ID:-}" ]; then
+            node "$APP_ROOT/dist/index.js" config set channels.discord.guilds."${DISCORD_GUILD_ID}".requireMention false --strict-json
+            if [ -n "${DISCORD_ZIND_CONTENT_CHANNEL_ID:-}" ]; then
+                node "$APP_ROOT/dist/index.js" config set channels.discord.guilds."${DISCORD_GUILD_ID}".channels."${DISCORD_ZIND_CONTENT_CHANNEL_ID}".requireMention false --strict-json
+            fi
+        fi
     fi
 
     if [ "${ENABLE_WHATSAPP:-}" = "true" ]; then
@@ -643,7 +956,9 @@ if [ "$NEEDS_ONBOARDING" = "1" ]; then
     echo "  > Registrando MCP: obsidian"
     node "$APP_ROOT/dist/index.js" config set mcp.servers.obsidian.type "stdio"
     node "$APP_ROOT/dist/index.js" config set mcp.servers.obsidian.command "npx"
-    node "$APP_ROOT/dist/index.js" config set mcp.servers.obsidian.args '["-y","obsidian-mcp","/vault"]' --strict-json
+    OBSIDIAN_VAULT_DIR="${OBSIDIAN_VAULT_PATH:-/vault}"
+    OBSIDIAN_MCP_PACKAGE="obsidian-mcp@${OBSIDIAN_MCP_VERSION_VALUE}"
+    node "$APP_ROOT/dist/index.js" config set mcp.servers.obsidian.args "[\"-y\",\"${OBSIDIAN_MCP_PACKAGE}\",\"${OBSIDIAN_VAULT_DIR}\"]" --strict-json
 
     echo " >>> [ETAPA 5/5] Instalando Skills..."
     if [ -n "${AUTO_INSTALL_SKILLS:-}" ]; then
@@ -716,6 +1031,7 @@ wait_for_gateway() {
 
 register_versioned_crons() {
     local cron_dir="$WORKSPACE_DIR/crons"
+    local cron_hash_dir="$CONFIG_DIR/cron/source-hashes"
     local current_cron_hash
     current_cron_hash="$(
         find "$cron_dir" -name "*.cron.md" -type f 2>/dev/null -exec cat {} + | sha256sum | awk '{print $1}'
@@ -732,11 +1048,79 @@ register_versioned_crons() {
     fi
 
     echo " >>> Registrando cronjobs versionados..."
+    mkdir -p "$cron_hash_dir"
 
     if ! ls "$cron_dir"/*.cron.md >/dev/null 2>&1; then
         echo "  ! Nenhum arquivo .cron.md encontrado em $cron_dir"
         return 0
     fi
+
+    find_cron_jobs_by_name() {
+        local target_name="$1"
+        local jobs_file="$CONFIG_DIR/cron/jobs.json"
+
+        if [ -z "$target_name" ] || [ ! -f "$jobs_file" ]; then
+            return 0
+        fi
+
+        python3 - "$jobs_file" "$target_name" <<'PY'
+import json
+import sys
+
+jobs_path, target_name = sys.argv[1], sys.argv[2]
+
+try:
+    with open(jobs_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+except Exception:
+    raise SystemExit(0)
+
+def walk(node):
+    if isinstance(node, dict):
+        name = node.get("name")
+        if name == target_name:
+            value = node.get("jobId")
+            if not isinstance(value, str) or not value:
+                value = node.get("id")
+            if isinstance(value, str) and value:
+                agent = node.get("agentId")
+                if not isinstance(agent, str):
+                    agent = ""
+                print(f"{value}|{agent}")
+        for child in node.values():
+            walk(child)
+    elif isinstance(node, list):
+        for child in node:
+            walk(child)
+
+walk(payload)
+PY
+    }
+
+    extract_agent_from_cron_command() {
+        local raw_command="$1"
+        python3 - "$raw_command" <<'PY'
+import shlex
+import sys
+
+if len(sys.argv) < 2:
+    raise SystemExit(0)
+
+raw = sys.argv[1]
+try:
+    tokens = shlex.split(raw)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+agent = ""
+for idx, token in enumerate(tokens[:-1]):
+    if token == "--agent":
+        agent = tokens[idx + 1]
+
+print(agent)
+PY
+    }
 
     for cron_file in "$cron_dir"/*.cron.md; do
         local cron_id
@@ -744,14 +1128,69 @@ register_versioned_crons() {
         local cron_name
         cron_name=$(tr -d '\r' < "$cron_file" | grep -o -- '--name "[^"]*"' | head -1 | sed 's/--name "//;s/"$//')
         local cron_command
+        local cron_file_hash
+        local cron_hash_file
+        local prev_cron_file_hash=""
+        local desired_agent=""
+        local expected_existing_agent=""
+        local existing_job_id=""
+        local existing_job_entries=""
+        local existing_job_agent=""
+        local recreate_for_agent_mismatch=0
 
-        if [ -n "$cron_name" ] && openclaw cron list 2>/dev/null | grep -qF "\"$cron_name\""; then
-            echo "  > Cronjob '$cron_name' ja existe, pulando."
+        cron_file_hash="$(sha256sum "$cron_file" | awk '{print $1}')"
+        cron_hash_file="$cron_hash_dir/$cron_id.sha256"
+        if [ -f "$cron_hash_file" ]; then
+            prev_cron_file_hash="$(cat "$cron_hash_file")"
+        fi
+
+        cron_command="$(tr -d '\r' < "$cron_file")"
+        desired_agent="$(extract_agent_from_cron_command "$cron_command")"
+
+        if [ -n "$cron_name" ]; then
+            existing_job_entries="$(find_cron_jobs_by_name "$cron_name")"
+            existing_job_id="$(printf '%s\n' "$existing_job_entries" | awk -F'|' 'NF{last=$1} END{print last}')"
+            existing_job_agent="$(printf '%s\n' "$existing_job_entries" | awk -F'|' 'NF{last=$2} END{print last}')"
+        fi
+
+        expected_existing_agent="${desired_agent:-default}"
+        if [ -n "$existing_job_id" ]; then
+            local normalized_existing_agent="${existing_job_agent:-default}"
+            if [ "$normalized_existing_agent" != "$expected_existing_agent" ]; then
+                recreate_for_agent_mismatch=1
+                echo "  > Cronjob '$cron_name' com agent incorreto (atual=${normalized_existing_agent}, esperado=${expected_existing_agent}); forçando recriação."
+            fi
+        fi
+
+        if [ -n "$existing_job_id" ] && [ -z "$prev_cron_file_hash" ] && [ "$recreate_for_agent_mismatch" -eq 0 ]; then
+            case "$cron_id" in
+                obsidian_git_push|obsidian_git_pull)
+                    ;;
+                *)
+                    echo "  > Cronjob '$cron_name' ja existente (migração inicial), registrando hash local e pulando."
+                    echo "$cron_file_hash" > "$cron_hash_file"
+                    continue
+                    ;;
+            esac
+        fi
+
+        if [ -n "$existing_job_id" ] && [ "$cron_file_hash" = "$prev_cron_file_hash" ] && [ "$recreate_for_agent_mismatch" -eq 0 ]; then
+            echo "  > Cronjob '$cron_name' sem alteracao, pulando."
             continue
         fi
 
-        echo "  > Registrando cronjob: $cron_id"
-        cron_command="$(tr -d '\r' < "$cron_file")"
+        if [ -n "$existing_job_id" ]; then
+            echo "  > Cronjob '$cron_name' alterado, recriando..."
+            while IFS='|' read -r stale_job_id _; do
+                [ -n "$stale_job_id" ] || continue
+                if ! openclaw cron remove "$stale_job_id" >/dev/null 2>&1; then
+                    echo "  ! Falha ao remover cronjob '$cron_name' (id: $stale_job_id); tentando registrar mesmo assim."
+                fi
+            done <<<"$existing_job_entries"
+        else
+            echo "  > Registrando cronjob: $cron_id"
+        fi
+
         if [ -n "$cron_name" ]; then
             cron_command="$(
                 python3 -c 'import re, sys, urllib.parse
@@ -764,7 +1203,9 @@ print(re.sub(r"--message \"([^\"]*)\"", lambda m: f"--message \"{marker}{m.group
         fi
         if ! printf '%s\n' "$cron_command" | sh; then
             echo "  ! Erro ao registrar cronjob $cron_id."
+            continue
         fi
+        echo "$cron_file_hash" > "$cron_hash_file"
     done
 
     echo "$current_cron_hash" > "$CRON_HASH_FILE"

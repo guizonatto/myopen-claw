@@ -3,7 +3,7 @@ name: crm
 description: "Skill para criar, atualizar e consultar dados sobre conhecidos, clientes, amigos e familiares, utilizando o serviço MCP-CRM."
 metadata:
   openclaw:
-    model: usage-router/groq/openai/gpt-oss-20b
+    model: usage-router/cerebras/gpt-oss-120b
 ---
 # Skill: CRM - Gerenciamento de Contatos
 
@@ -13,6 +13,19 @@ Skill para criar, atualizar e consultar dados sobre conhecidos, clientes, amigos
 - Permite registrar informações detalhadas sobre cada contato.
 - Suporta atualizações incrementais e histórico de interações.
 - Invoca o MCP-CRM para persistência e consulta dos dados.
+
+## Operações MCP-CRM (v1)
+
+- Base: `add_contact`, `search_contact`, `update_contact`, `list_contacts_to_follow_up`
+- Prontidão/enriquecimento: `verify_contact_data`, `enrich_contact_data`, `qualify_contact_for_outreach`
+- Conversa humana: `create_personalized_outreach_draft`, `approve_first_touch`, `log_conversation_event`
+- Agenda/compliance: `schedule_contact_task`, `sync_calendar_links`, `mark_no_interest`
+
+### Regras obrigatórias
+
+- Primeiro contato sempre passa por aprovação humana (`approve_first_touch`).
+- Se o lead responder sem interesse, chamar `mark_no_interest` imediatamente.
+- Não retomar contato quando `do_not_contact=true`.
 
 
 - O campo `social_username` (username em redes sociais como LinkedIn, Instagram, Facebook, Twitter, TikTok) é uma entrada válida para identificar contatos.

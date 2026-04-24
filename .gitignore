@@ -53,4 +53,3 @@ gdrive-sa.json
 *.tmp
 graphify-out/
 .tmp-cortex-src/
-.claude/rules/caveman.md

@@ -1,0 +1,12 @@
+{
+  "default": {
+    "objection_preco": "tratar custo comparando com perda operacional atual",
+    "objection_tempo": "mostrar implementacao incremental em passos pequenos",
+    "objection_confianca": "usar prova concreta e proposta de baixo risco"
+  },
+  "sindicos": {
+    "signal_caos": "mencionar excesso de mensagens e falta de previsibilidade",
+    "signal_retrabalho": "mencionar retrabalho em follow-up e pagamento",
+    "signal_perda": "mencionar risco de perder oportunidades por demora"
+  }
+}

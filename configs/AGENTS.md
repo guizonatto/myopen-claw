@@ -23,7 +23,7 @@ Ao fim da sessão: salve resumo em `memory/YYYY-MM-DD.md` (tarefas, decisões, b
 | Padrão aprendido / estratégia do agente | MemClaw | `BaseAgent.remember()` → `flush_memory()` |
 | Dado estruturado de contato/lead | CRM (`mcp-crm`) | `add_contact` / `update_contact` |
 | Conhecimento pessoal durável | Vault `/vault/2000-Knowledge/` | via Librarian SOP |
-| Nota bruta para processar depois | Vault `/vault/4000-Inbox/` | MCP obsidian: `create_note` |
+| Nota bruta para processar depois | Vault `/vault/4000-Inbox/` | MCP obsidian: `create-note` |
 | Memória semântica buscável (IA) | MemClaw (Cortex Memory) | ver seção abaixo |
 | Regra ou aprendizado do sistema | `AGENTS.md` / `TOOLS.md` | editar arquivo |
 
@@ -57,7 +57,7 @@ O vault está montado em `/vault` (docker: `C:/Vault/Pessoal` → `/vault`).
 - Ao processar inbox (`/vault/4000-Inbox/`) → leia o SOP do Librarian primeiro.
 
 ### Quando escrever
-- Nota bruta/rascunho → `create_note "/vault/4000-Inbox/<título>"` para o Librarian processar.
+- Nota bruta/rascunho → `create-note {"vault":"vault","filename":"<título>.md","folder":"4000-Inbox","content":"..."}` para o Librarian processar.
 - Conhecimento final → somente via Librarian (nunca diretamente em `2000-Knowledge/`).
 
 ### Indexação e catalogação — delegar ao Librarian

@@ -1,54 +1,67 @@
 ---
 name: vault
-description: "Acesso ao vault Obsidian via MCP obsidian."
+description: "Acesso ao vault Obsidian"
 metadata:
   openclaw:
-    model: usage-router/groq/openai/gpt-oss-20b
+    model: google/gemini-2.5-flash
 ---
 
 # Skill: vault
 
-Acesso ao vault Obsidian em `/vault` via MCP **obsidian** (`obsidian-mcp`).
+Acesso ao vault Obsidian em `/vault`
 Não requer Obsidian app rodando — opera diretamente nos arquivos.
 
 ## Operações disponíveis
 
-### Buscar notas por conteúdo
+### Descobrir vault disponível
 ```
-search_notes "query"
+list-available-vaults
 ```
 
-### Listar notas
+### Buscar notas por conteúdo/nome (equivalente a listar)
 ```
-list_notes
-list_notes "4000-Inbox"
+search-vault {"vault":"vault","query":"project","searchType":"content"}
+search-vault {"vault":"vault","query":".md","path":"4000-Inbox","searchType":"filename"}
 ```
 
 ### Ler nota
 ```
-read_note "2000-Knowledge/Minha Nota"
+read-note {"vault":"vault","filename":"Minha Nota.md","folder":"2000-Knowledge"}
 ```
 
 ### Criar nota
 ```
-create_note "4000-Inbox/Nova Nota" <conteúdo>
+create-note {"vault":"vault","filename":"Nova Nota.md","folder":"4000-Inbox","content":"<conteúdo>"}
 ```
 
 ### Editar nota
 ```
-edit_note "2000-Knowledge/Minha Nota" <novo conteúdo>
+edit-note {"vault":"vault","filename":"Minha Nota.md","folder":"2000-Knowledge","operation":"replace","content":"<novo conteúdo>"}
 ```
 
 ### Mover nota
 ```
-move_note "4000-Inbox/nota" "2000-Knowledge/nota"
+move-note {"vault":"vault","source":"4000-Inbox/nota.md","destination":"2000-Knowledge/nota.md"}
 ```
 
 ### Gerenciar tags
 ```
-add_tag "2000-Knowledge/nota" "tag"
-remove_tag "2000-Knowledge/nota" "tag"
+add-tags {"vault":"vault","files":["2000-Knowledge/nota.md"],"tags":["tag"]}
+remove-tags {"vault":"vault","files":["2000-Knowledge/nota.md"],"tags":["tag"]}
 ```
+
+### Migração legado (somente referência)
+
+| Antigo | Atual |
+|---|---|
+| `list_notes` | `search-vault` (com `searchType:"filename"`) |
+| `read_note` | `read-note` |
+| `create_note` | `create-note` |
+| `edit_note` | `edit-note` |
+| `move_note` | `move-note` |
+| `search_notes` | `search-vault` |
+| `add_tag` | `add-tags` |
+| `remove_tag` | `remove-tags` |
 
 ## Estrutura do vault
 
@@ -78,10 +91,10 @@ Ao processar qualquer nota, o agente carrega nesta ordem:
 ## Fluxo do inbox
 
 1. Nova nota cai em `4000-Inbox/`
-2. `list_notes "4000-Inbox"` — se vazio, parar
-3. `read_note "3000-Agents/Librarian_SOP"` + `read_note "9000-System/Schema_Definitions"`
+2. `search-vault {"vault":"vault","query":".md","path":"4000-Inbox","searchType":"filename"}` — se vazio, parar
+3. `read-note {"vault":"vault","filename":"Librarian_SOP.md","folder":"3000-Agents"}` + `read-note {"vault":"vault","filename":"Schema_Definitions.md","folder":"9000-System"}`
 4. Aplicar binary split (Concept vs Procedure)
 5. Extrair `failure_mode`, `control_strategy`, `mechanisms`, `isomorphism`
 6. Validar schema — campos obrigatórios todos presentes?
-   - Não → `move_note` para `4000-Inbox/Quarantine/`
-7. `move_note` para pasta correta em `2000-Knowledge/`
+   - Não → `move-note` para `4000-Inbox/Quarantine/<arquivo>.md`
+7. `move-note` para pasta correta em `2000-Knowledge/`

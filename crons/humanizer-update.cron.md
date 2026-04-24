@@ -3,6 +3,6 @@ openclaw cron add \
   --cron "0 6 * * 1" \
   --session isolated \
   --no-deliver \
-  --agent default \
+  --agent ops \
   --message "humanizer self-update" \
   --tz "${CRON_TZ:-America/Sao_Paulo}"

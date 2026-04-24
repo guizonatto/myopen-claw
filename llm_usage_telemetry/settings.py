@@ -45,6 +45,8 @@ class TelemetrySettings:
     model_limits_catalog_path: str = DEFAULT_MODEL_LIMITS_CATALOG_PATH
     sync_openclaw_models: bool = True
     sync_openclaw_models_strict: bool = False
+    pg_url: str = ""
+    redis_url: str = ""
 
 
 def load_settings(env: dict[str, str] | None = None) -> TelemetrySettings:
@@ -68,4 +70,6 @@ def load_settings(env: dict[str, str] | None = None) -> TelemetrySettings:
         gateway_password=env_map.get("OPENCLAW_GATEWAY_PASSWORD", env_map.get("ADMIN_PASSWORD", "")),
         discord_bot_token=env_map.get("DISCORD_BOT_TOKEN", ""),
         discord_channel_id=env_map.get("MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID", ""),
+        pg_url=env_map.get("MODEL_USAGE_POSTGRES_URL", ""),
+        redis_url=env_map.get("MODEL_USAGE_REDIS_URL", ""),
     )

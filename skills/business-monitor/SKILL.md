@@ -3,7 +3,7 @@ name: business-monitor
 description: "Monitora fontes de noticias de negocios e gera resumos."
 metadata:
   openclaw:
-    model: usage-router/groq/llama-3.1-8b-instant
+    model: usage-router/cerebras/llama3.1-8b
 ---
 
 # Skill: fetch_and_summarize_business_news
@@ -19,11 +19,13 @@ Monitora fontes de notícias de negócios nacionais e internacionais e gera resu
 - Morning Brew: https://www.morningbrew.com/daily
 - HackerNews: https://thehackernews.com/
 - Product Hunt: https://www.producthunt.com/
+- Valor Economico: https://valor.globo.com/
 
 ## Funcionamento
 - Busca as principais manchetes de cada fonte (heurística simples).
 - Gera um resumo automático para cada notícia.
 - Pronto para integração com MCP de negócios.
+- Somente notícias de no máximo D-1 até o dia atual (referente a data atual)
 
 ## Política de busca
 - Use `web_fetch` como caminho padrão para cada fonte fixa acima.

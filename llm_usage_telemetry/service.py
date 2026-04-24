@@ -28,9 +28,12 @@ from llm_usage_telemetry.model_limits_catalog import DEFAULT_MODEL_LIMITS_CATALO
 from llm_usage_telemetry.storage import (
     UsageEvent,
     connect_db,
+    connect_pg,
     get_model_limits,
+    initialize_pg_schema,
     initialize_schema,
     record_usage_event,
+    record_usage_event_pg,
     upsert_model_limits,
 )
 from llm_usage_telemetry.upstreams import parse_target_model, resolve_upstream
@@ -704,6 +707,12 @@ def _rate_limit_check_and_record(
     day_start = _bucket_start_day(now, tz_name).isoformat()
     token_inc = max(int(tokens or 0), 0)
 
+    # Hard reject: single request larger than the model's entire minute TPM budget.
+    # No amount of waiting helps — skip immediately so the gateway falls back to
+    # a higher-TPM model (e.g. Cerebras) without wasting an upstream call.
+    if tpm is not None and token_inc > int(tpm):
+        return False, f"request_exceeds_tpm: request={token_inc} tpm_limit={tpm}"
+
     def current(kind: str, start: str) -> tuple[int, int]:
         row = conn.execute(
             """
@@ -878,6 +887,13 @@ class MetricsProxyService:
         self.settings = settings
         self.conn = connect_db(settings.db_path)
         initialize_schema(self.conn)
+        self._pg_url = getattr(settings, "pg_url", "")
+        self.pg_conn = None
+        if self._pg_url:
+            self.pg_conn = connect_pg(self._pg_url)
+            if self.pg_conn is not None:
+                initialize_pg_schema(self.pg_conn)
+                print("[llm-metrics-proxy] usage_events → PostgreSQL")
         self.last_openclaw_sync: dict[str, Any] | None = None
         if getattr(settings, "sync_openclaw_models", False):
             try:
@@ -904,8 +920,27 @@ class MetricsProxyService:
                 result["google_enrich"] = google
         return result
 
+    def _record(self, event: UsageEvent) -> None:
+        if self.pg_conn is not None:
+            try:
+                record_usage_event_pg(self.pg_conn, event)
+                return
+            except Exception as exc:
+                logger.warning("pg write failed (%s), reconnecting…", exc)
+                try:
+                    self.pg_conn = connect_pg(self._pg_url)
+                    if self.pg_conn is not None:
+                        record_usage_event_pg(self.pg_conn, event)
+                        return
+                except Exception as exc2:
+                    logger.error("pg reconnect failed (%s), falling back to SQLite", exc2)
+                    self.pg_conn = None
+        record_usage_event(self.conn, event)
+
     def close(self) -> None:
         self.conn.close()
+        if self.pg_conn is not None:
+            self.pg_conn.close()
 
     async def handle_openai_request(
         self,
@@ -1202,8 +1237,7 @@ class MetricsProxyService:
                             elapsed_ms = int(
                                 (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
                             )
-                            record_usage_event(
-                                self.conn,
+                            self._record(
                                 UsageEvent(
                                     timestamp=started_at,
                                     service=service,
@@ -1360,8 +1394,7 @@ class MetricsProxyService:
                         elapsed_ms = int(
                             (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
                         )
-                        record_usage_event(
-                            self.conn,
+                        self._record(
                             UsageEvent(
                                 timestamp=started_at,
                                 service=service,
@@ -1537,8 +1570,7 @@ class MetricsProxyService:
                         error_message=str(error_message),
                     )
                 elapsed_ms = int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000)
-                record_usage_event(
-                    self.conn,
+                self._record(
                     UsageEvent(
                         timestamp=started_at,
                         service=service,

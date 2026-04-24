@@ -20,18 +20,22 @@
     "groq": {
       "defaults": {
         "rpm": 30,
+        "tpm": 6000,
         "max_output_tokens": 8192
       },
       "models": {
         "llama-3.1-8b-instant": {
+          "tpm": 6000,
           "max_output_tokens": 8192,
           "context_window": 131072
         },
         "llama-3.3-70b-versatile": {
+          "tpm": 12000,
           "max_output_tokens": 32768,
           "context_window": 128000
         },
         "llama-3.1-70b-versatile": {
+          "tpm": 6000,
           "max_output_tokens": 8192,
           "context_window": 131072
         },
@@ -61,6 +65,7 @@
           "max_output_tokens": 8192
         },
         "meta-llama/llama-4-scout-17b-16e-instruct": {
+          "tpm": 30000,
           "max_output_tokens": 8192
         },
         "meta-llama/llama-prompt-guard-2-22m": {
@@ -69,7 +74,20 @@
         "meta-llama/llama-prompt-guard-2-86m": {
           "max_output_tokens": 512
         },
+        "openai/gpt-oss-20b": {
+          "tpm": 8000,
+          "max_output_tokens": 8192
+        },
+        "openai/gpt-oss-safeguard-20b": {
+          "tpm": 8000,
+          "max_output_tokens": 8192
+        },
+        "openai/gpt-oss-120b": {
+          "tpm": 8000,
+          "max_output_tokens": 8192
+        },
         "qwen/qwen3-32b": {
+          "tpm": 6000,
           "max_output_tokens": 8192
         }
       }

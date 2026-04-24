@@ -39,6 +39,8 @@ O objetivo é simples: **menos tarefas repetitivas, mais consistência** — sem
 	docker logs -f openclaw-gateway
 	```
 
+Para evitar startup lento em reinicios, mantenha `OPENCLAW_ONBOARD_MODE=once` no `.env` (ou use `off` se quiser onboarding totalmente manual).
+
 Os crons versionados em `crons/*.cron.md` são registrados automaticamente no start do container (via `entrypoint.sh`).
 
 ## Configuração rápida de canais (ex.: Telegram)

@@ -1,0 +1,27 @@
+{
+  "lead": {
+    "objective": "abrir conversa contextual sem pressao",
+    "cta": "validar dor principal e interesse em continuar",
+    "template_hint": "abertura curta + contexto + pergunta unica"
+  },
+  "qualificado": {
+    "objective": "aprofundar dor e impacto operacional",
+    "cta": "mapear urgencia e proximo passo",
+    "template_hint": "confirmacao de dor + microprova + pergunta de prioridade"
+  },
+  "interesse": {
+    "objective": "transformar curiosidade em passo concreto",
+    "cta": "agendar conversa curta",
+    "template_hint": "resposta direta + beneficio pratico + convite"
+  },
+  "proposta": {
+    "objective": "reduzir risco percebido e facilitar decisao",
+    "cta": "definir decisao e data",
+    "template_hint": "recap de valor + tratamento de objeção + fechamento"
+  },
+  "follow_up": {
+    "objective": "retomar sem parecer insistente",
+    "cta": "confirmar se faz sentido manter conversa",
+    "template_hint": "recap curto + respeito ao tempo + pergunta binaria"
+  }
+}

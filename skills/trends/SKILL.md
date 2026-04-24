@@ -3,7 +3,7 @@ name: trends
 description: "Busca trending topics e gera resumos."
 metadata:
   openclaw:
-    model: usage-router/groq/llama-3.1-8b-instant
+    model: usage-router/cerebras/llama3.1-8b
 ---
 
 # Skill: fetch_and_summarize

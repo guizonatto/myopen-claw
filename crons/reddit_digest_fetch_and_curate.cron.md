@@ -1,1 +1,1 @@
-openclaw cron add --name "fetch_reddit_digest" --cron "0 17 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Execute a skill reddit_digest: buscar e curar posts relevantes do Reddit e gerar digest." --announce --channel telegram --to "${TELEGRAM_USER_ID}"
+openclaw cron add --agent intel --name "fetch_reddit_digest" --cron "0 17 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Execute a skill reddit_digest: buscar e curar posts relevantes do Reddit e gerar digest." --announce --channel telegram --to "${TELEGRAM_USER_ID}"

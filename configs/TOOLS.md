@@ -13,17 +13,31 @@ Vault montado em `/vault` (host: `C:\Vault\Pessoal`). Acesso via obsidian MCP.
 
 ### obsidian MCP (navegação + leitura/escrita + busca)
 
-MCP `obsidian` registrado em `openclaw.json` via `npx obsidian-mcp /vault`.
+MCP `obsidian` registrado em `openclaw.json` via `npx -y obsidian-mcp@1.0.6 /vault` (ou `obsidian-mcp@${OBSIDIAN_MCP_VERSION}` em runtime).
 Não requer Obsidian app rodando — acessa arquivos diretamente.
+Use sempre `kebab-case`, com `vault` explícito e caminhos relativos.
 
 | Operação | Tool |
 |---|---|
-| Listar notas | `list_notes` |
-| Ler nota | `read_note "Folder/Note"` |
-| Criar/escrever nota | `create_note` / `edit_note` |
-| Buscar por conteúdo | `search_notes "query"` |
-| Gerenciar tags | `add_tag` / `remove_tag` |
-| Mover nota | `move_note` |
+| Descobrir vault | `list-available-vaults` |
+| Buscar notas por nome/conteúdo | `search-vault {"vault":"vault","query":"...","searchType":"filename|content|both"}` |
+| Ler nota | `read-note {"vault":"vault","filename":"Note.md","folder":"Folder"}` |
+| Criar/escrever nota | `create-note` / `edit-note` |
+| Gerenciar tags | `add-tags` / `remove-tags` |
+| Mover nota | `move-note` |
+
+### Migração legado (somente referência)
+
+| Antigo | Atual |
+|---|---|
+| `list_notes` | `search-vault` (listar: `searchType:"filename"` + `query:".md"`) |
+| `read_note` | `read-note` |
+| `create_note` | `create-note` |
+| `edit_note` | `edit-note` |
+| `move_note` | `move-note` |
+| `search_notes` | `search-vault` |
+| `add_tag` | `add-tags` |
+| `remove_tag` | `remove-tags` |
 
 ### Estrutura do vault
 

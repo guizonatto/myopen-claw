@@ -91,6 +91,13 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/v1}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
+      - MODEL_USAGE_POSTGRES_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
+      - MODEL_USAGE_REDIS_URL=redis://openclaw-redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - llm-metrics-data:/data
       - openclaw-data:/openclaw:ro
@@ -120,12 +127,14 @@ services:
       - ./configs:/opt/openclaw-bootstrap/workspace/configs
       - ./crons:/opt/openclaw-bootstrap/workspace/crons
       - ./scripts:/opt/openclaw-bootstrap/workspace/scripts
+      - ./openclaw:/opt/openclaw-bootstrap/workspace/openclaw:ro
       - ./hooks:/opt/openclaw-bootstrap/hooks
       - ./memclaw-memclaw-0.9.39.tgz:/opt/openclaw-bootstrap/memclaw.tgz
       - ./mcps:/app/mcps
       - ./requirements.txt:/app/requirements.txt
       - ./llm_usage_telemetry:/app/llm_usage_telemetry:ro
       - ./plugins:/app/plugins:ro
+      - ./agents:/app/agents:ro
       - C:/Vault/Pessoal:/vault
     environment:
       # - AUTH_CHOICE=${AUTH_CHOICE}

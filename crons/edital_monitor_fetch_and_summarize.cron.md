@@ -1,1 +1,1 @@
-openclaw cron add --name "fetch_editais" --cron "30 6 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Execute a skill edital_monitor: buscar editais de inovação e tecnologia e gerar resumo." --announce --channel telegram --to "${TELEGRAM_USER_ID}"
+openclaw cron add --agent intel --name "fetch_editais" --cron "30 6 * * *" --tz "${CRON_TZ:-America/Sao_Paulo}" --session isolated --message "Execute a skill edital_monitor: buscar editais de inovação e tecnologia e gerar resumo." --announce --channel telegram --to "${TELEGRAM_USER_ID}"

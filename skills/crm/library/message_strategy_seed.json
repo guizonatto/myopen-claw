@@ -1,0 +1,160 @@
+{
+  "prior": {
+    "mean": 0.0,
+    "weight": 5,
+    "epsilon": 0.15,
+    "low_confidence_attempts": 5
+  },
+  "strategies": [
+    {
+      "stage": "lead",
+      "client_type": "condominio",
+      "city": "sao_paulo",
+      "region": "sudeste",
+      "channel": "whatsapp",
+      "message_archetype": "context_open_question",
+      "template_hint": "abertura curta com contexto real e pergunta unica",
+      "tags": ["abertura", "contexto", "pergunta"]
+    },
+    {
+      "stage": "lead",
+      "client_type": "condominio",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "pain_mirror",
+      "template_hint": "espelhar dor operacional sem pressao",
+      "tags": ["dor", "empatia", "descoberta"]
+    },
+    {
+      "stage": "lead",
+      "client_type": "condominio",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "cross_channel_short",
+      "template_hint": "mensagem curta resiliente a variacao de canal",
+      "tags": ["canal", "curta", "flexivel"]
+    },
+    {
+      "stage": "lead",
+      "client_type": "b2b_servicos",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "signal_trigger",
+      "template_hint": "usar sinal recente + pergunta objetiva",
+      "tags": ["sinal", "gatilho", "resposta"]
+    },
+    {
+      "stage": "qualificado",
+      "client_type": "condominio",
+      "city": "sao_paulo",
+      "region": "sudeste",
+      "channel": "whatsapp",
+      "message_archetype": "impact_probe",
+      "template_hint": "validar impacto atual e urgencia",
+      "tags": ["impacto", "prioridade", "dor"]
+    },
+    {
+      "stage": "qualificado",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "qualify_microdiagnostic",
+      "template_hint": "microdiagnostico com uma pergunta por vez",
+      "tags": ["qualificacao", "microdiagnostico"]
+    },
+    {
+      "stage": "interesse",
+      "client_type": "condominio",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "next_step_invite",
+      "template_hint": "beneficio concreto e convite para passo curto",
+      "tags": ["convite", "beneficio", "agenda"]
+    },
+    {
+      "stage": "interesse",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "social_proof_soft",
+      "template_hint": "prova leve + pergunta de disponibilidade",
+      "tags": ["prova", "agenda", "conversao"]
+    },
+    {
+      "stage": "proposta",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "risk_reversal",
+      "template_hint": "reduzir risco percebido e facilitar decisao",
+      "tags": ["risco", "decisao", "objeção"]
+    },
+    {
+      "stage": "follow_up",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "respectful_reactivation",
+      "template_hint": "retomar com respeito ao tempo e pergunta binaria",
+      "tags": ["followup", "respeito", "reativacao"]
+    },
+    {
+      "stage": "lead",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "stage_global_default",
+      "template_hint": "mensagem curta contextual com CTA no fim",
+      "tags": ["global", "default"]
+    },
+    {
+      "stage": "qualificado",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "stage_global_default",
+      "template_hint": "aprofundar dor e alinhar proximo passo curto",
+      "tags": ["global", "default"]
+    },
+    {
+      "stage": "interesse",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "stage_global_default",
+      "template_hint": "converter interesse em acao concreta",
+      "tags": ["global", "default"]
+    },
+    {
+      "stage": "proposta",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "stage_global_default",
+      "template_hint": "facilitar decisao com clareza e objetividade",
+      "tags": ["global", "default"]
+    },
+    {
+      "stage": "follow_up",
+      "client_type": "*",
+      "city": "*",
+      "region": "*",
+      "channel": "*",
+      "message_archetype": "stage_global_default",
+      "template_hint": "retomar contato sem soar insistente",
+      "tags": ["global", "default"]
+    }
+  ]
+}

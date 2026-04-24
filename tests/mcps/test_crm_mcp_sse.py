@@ -1,11 +1,15 @@
-import pytest
-from httpx import AsyncClient
+from fastapi.testclient import TestClient
 from mcps.crm_mcp.main import app
 
-@pytest.mark.asyncio
-async def test_sse_crm():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.post("/sse", json={"operation": "add_contact", "params": {"nome": "Teste", "email": "t@t.com"}})
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/event-stream")
-        assert "data:" in response.text
+
+def test_sse_crm(monkeypatch):
+    monkeypatch.setenv("MCP_API_KEY", "test-key")
+    client = TestClient(app)
+    response = client.post(
+        "/sse",
+        json={"operation": "search_contact", "query": "teste"},
+        headers={"X-API-Key": "test-key"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "data:" in response.text

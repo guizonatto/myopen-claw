@@ -1,21 +1,28 @@
 """
 Tool: storage
-Função: Persiste eventos brutos de uso de LLM em SQLite e gera agregados determinísticos.
+Função: Persiste eventos brutos de uso de LLM em SQLite (rate buckets/limits) e PostgreSQL (usage_events).
 Usar quando: Precisar registrar tentativas por service/provider/model e consolidar relatórios.
 
 ENV_VARS:
-  - (nenhuma)
+  - MODEL_USAGE_POSTGRES_URL: PostgreSQL DSN para usage_events (opcional; fallback: SQLite)
+  - MODEL_USAGE_REDIS_URL: Redis URL para rate-limit buckets (opcional; fallback: SQLite)
 
 DB_TABLES:
-  - usage_events: leitura+escrita
-  - report_dispatches: leitura+escrita
+  - usage_events: leitura+escrita (PostgreSQL quando configurado, senão SQLite)
+  - report_dispatches: leitura+escrita (SQLite)
+  - model_limits: leitura+escrita (SQLite)
+  - model_rate_buckets: leitura+escrita (SQLite)
 """
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from llm_usage_telemetry.reporting import UsageSummaryRow
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -74,8 +81,10 @@ def connect_db(db_path: str | Path) -> sqlite3.Connection:
         return conn
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -295,8 +304,40 @@ def upsert_model_limits(
 
 
 def record_usage_event(conn: sqlite3.Connection, event: UsageEvent) -> None:
-    conn.execute(
-        """
+    import time as _time
+    params = (
+        event.timestamp.isoformat(),
+        event.service,
+        event.provider,
+        event.model,
+        event.request_kind,
+        int(event.success),
+        event.http_status,
+        event.latency_ms,
+        event.attempt_number,
+        event.input_tokens,
+        event.output_tokens,
+        event.total_tokens,
+        event.token_accuracy,
+        event.input_chars,
+        event.input_words,
+        event.input_estimated_tokens,
+        event.response_chars,
+        event.response_words,
+        event.response_estimated_tokens,
+        event.request_payload,
+        event.response_payload,
+        event.origin_type,
+        event.origin_name,
+        event.trigger_type,
+        event.trigger_name,
+        event.agent_name,
+        event.error_code,
+        event.error_message,
+        event.request_id,
+        event.logical_request_id,
+    )
+    sql = """
         INSERT INTO usage_events (
           timestamp, service, provider, model, request_kind, success,
           http_status, latency_ms, attempt_number,
@@ -307,41 +348,140 @@ def record_usage_event(conn: sqlite3.Connection, event: UsageEvent) -> None:
           origin_type, origin_name, trigger_type, trigger_name, agent_name,
           error_code, error_message, request_id, logical_request_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            event.timestamp.isoformat(),
-            event.service,
-            event.provider,
-            event.model,
-            event.request_kind,
-            int(event.success),
-            event.http_status,
-            event.latency_ms,
-            event.attempt_number,
-            event.input_tokens,
-            event.output_tokens,
-            event.total_tokens,
-            event.token_accuracy,
-            event.input_chars,
-            event.input_words,
-            event.input_estimated_tokens,
-            event.response_chars,
-            event.response_words,
-            event.response_estimated_tokens,
-            event.request_payload,
-            event.response_payload,
-            event.origin_type,
-            event.origin_name,
-            event.trigger_type,
-            event.trigger_name,
-            event.agent_name,
-            event.error_code,
-            event.error_message,
-            event.request_id,
-            event.logical_request_id,
-        ),
+    """
+    for _attempt in range(3):
+        try:
+            conn.execute(sql, params)
+            conn.commit()
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc) and _attempt < 2:
+                _time.sleep(0.1 * (_attempt + 1))
+                continue
+            raise
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL support
+# ---------------------------------------------------------------------------
+
+_PG_CREATE_USAGE_EVENTS = """
+CREATE TABLE IF NOT EXISTS llm_usage_events (
+  id          BIGSERIAL PRIMARY KEY,
+  timestamp   TIMESTAMPTZ NOT NULL,
+  service     TEXT NOT NULL,
+  provider    TEXT NOT NULL,
+  model       TEXT NOT NULL,
+  request_kind TEXT NOT NULL,
+  success     BOOLEAN NOT NULL,
+  http_status SMALLINT,
+  latency_ms  INTEGER,
+  attempt_number SMALLINT NOT NULL,
+  input_tokens    INTEGER,
+  output_tokens   INTEGER,
+  total_tokens    INTEGER,
+  token_accuracy  TEXT NOT NULL,
+  input_chars  INTEGER,
+  input_words  INTEGER,
+  input_estimated_tokens INTEGER,
+  response_chars INTEGER,
+  response_words INTEGER,
+  response_estimated_tokens INTEGER,
+  request_payload  TEXT,
+  response_payload TEXT,
+  origin_type  TEXT,
+  origin_name  TEXT,
+  trigger_type TEXT,
+  trigger_name TEXT,
+  agent_name   TEXT,
+  error_code   TEXT,
+  error_message TEXT,
+  request_id   TEXT,
+  logical_request_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_events_ts_provider
+  ON llm_usage_events (timestamp, provider, model);
+"""
+
+_PG_INSERT_USAGE_EVENT = """
+INSERT INTO llm_usage_events (
+  timestamp, service, provider, model, request_kind, success,
+  http_status, latency_ms, attempt_number,
+  input_tokens, output_tokens, total_tokens, token_accuracy,
+  input_chars, input_words, input_estimated_tokens,
+  response_chars, response_words, response_estimated_tokens,
+  request_payload, response_payload,
+  origin_type, origin_name, trigger_type, trigger_name, agent_name,
+  error_code, error_message, request_id, logical_request_id
+) VALUES (
+  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+)
+"""
+
+
+def connect_pg(pg_url: str) -> Any:
+    """Return a psycopg2 connection or None if psycopg2 unavailable."""
+    try:
+        import psycopg2
+        conn = psycopg2.connect(pg_url)
+        conn.autocommit = False
+        return conn
+    except Exception as exc:
+        logger.error("pg connect failed: %s", exc)
+        return None
+
+
+def initialize_pg_schema(pg_conn: Any) -> None:
+    with pg_conn.cursor() as cur:
+        cur.execute(_PG_CREATE_USAGE_EVENTS)
+    pg_conn.commit()
+
+
+def record_usage_event_pg(pg_conn: Any, event: UsageEvent) -> None:
+    params = (
+        event.timestamp.isoformat(),
+        event.service,
+        event.provider,
+        event.model,
+        event.request_kind,
+        event.success,
+        event.http_status,
+        event.latency_ms,
+        event.attempt_number,
+        event.input_tokens,
+        event.output_tokens,
+        event.total_tokens,
+        event.token_accuracy,
+        event.input_chars,
+        event.input_words,
+        event.input_estimated_tokens,
+        event.response_chars,
+        event.response_words,
+        event.response_estimated_tokens,
+        event.request_payload,
+        event.response_payload,
+        event.origin_type,
+        event.origin_name,
+        event.trigger_type,
+        event.trigger_name,
+        event.agent_name,
+        event.error_code,
+        event.error_message,
+        event.request_id,
+        event.logical_request_id,
     )
-    conn.commit()
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(_PG_INSERT_USAGE_EVENT, params)
+        pg_conn.commit()
+    except Exception as exc:
+        logger.error("pg record_usage_event failed: %s", exc)
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
+        raise
 
 
 def _compute_token_quality(exact_total: int, estimated_total: int) -> str:

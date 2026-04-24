@@ -61,4 +61,10 @@ docker exec openclaw-gateway sh -c '
     fi
 ' 2>/dev/null || true
 
+# 6. Valida contrato Obsidian (runtime + docs + skill + crons)
+echo "[$(date)] validando contrato Obsidian..."
+sh /repo/scripts/check_obsidian_contract.sh /repo \
+    && echo "[$(date)] contrato Obsidian OK" \
+    || { echo "[$(date)] ERRO: contrato Obsidian inválido"; exit 1; }
+
 echo "[$(date)] === auto-update done ==="

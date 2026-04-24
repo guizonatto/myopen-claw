@@ -3,7 +3,7 @@ name: reddit-digest
 description: "Busca top posts de subreddits de IA e organiza um digest."
 metadata:
   openclaw:
-    model: usage-router/groq/llama-3.1-8b-instant
+    model: usage-router/cerebras/llama3.1-8b
 ---
 
 # Skill: reddit_digest

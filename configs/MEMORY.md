@@ -16,7 +16,7 @@
 | Contato/lead (campos estruturados) | `mcp-crm` | `add_contact`, `update_contact` |
 | Nota/histórico de um contato (CRM) | `mcp-crm` | `update_contact` com `nota` (append com timestamp) |
 | Conhecimento pessoal durável | Vault `/vault/2000-Knowledge/` | MCP `obsidian`: via Librarian SOP |
-| Nota bruta para processar depois | Vault `/vault/4000-Inbox/` | MCP `obsidian`: `create_note` |
+| Nota bruta para processar depois | Vault `/vault/4000-Inbox/` | MCP `obsidian`: `create-note` |
 | Memória semântica buscável (IA) | MemClaw (Cortex Memory) | `cortex_search`, `cortex_add_memory`, `cortex_commit_session` |
 | Regras/aprendizados do sistema | `configs/AGENTS.md` / `configs/TOOLS.md` | editar arquivo |
 
@@ -56,9 +56,9 @@ fim da sessão     →  flush_memory()                  # 1 add_message por item
 
 - Vault em `/vault/` — é um repositório git clonado de `https://github.com/guizonatto/obsidian`.
 - **Git sync automático**: pull a cada 1h (`obsidian-git-pull`), push a cada 5min quando há mudanças (`obsidian-git-push`).
-- Acesso via MCP `obsidian` (configurado como `npx -y obsidian-mcp /vault`) para operações de conteúdo.
+- Acesso via MCP `obsidian` (configurado como `npx -y obsidian-mcp@${OBSIDIAN_MCP_VERSION:-1.0.6} /vault`) para operações de conteúdo.
 - Para operações git diretas (ex: forçar pull/push fora do cron), use shell: `git -C /vault ...`.
-- Operações comuns: `list_notes`, `read_note`, `create_note`, `edit_note`, `move_note`, `search_notes`, `add_tag`, `remove_tag`.
+- Operações comuns: `list-available-vaults`, `search-vault`, `read-note`, `create-note`, `edit-note`, `move-note`, `add-tags`, `remove-tags`.
 
 > **Local-first**: o vault é lido/escrito diretamente nos arquivos em `/vault`. O MCP obsidian acessa o filesystem local — não requer app Obsidian rodando.
 

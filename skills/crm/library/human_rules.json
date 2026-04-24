@@ -1,0 +1,20 @@
+{
+  "max_chars_whatsapp": 220,
+  "target_min_whatsapp_chars": 140,
+  "target_max_whatsapp_chars": 180,
+  "split_after_whatsapp_chars": 220,
+  "max_whatsapp_chunks": 3,
+  "max_chars_email": 900,
+  "forbidden_patterns": [
+    "Prezado(a) cliente",
+    "Temos a solucao perfeita",
+    "Aproveite esta oportunidade unica",
+    "Estamos entrando em contato para oferecer"
+  ],
+  "style_rules": [
+    "usar frases curtas",
+    "manter 1 objetivo por mensagem",
+    "incluir contexto real do cliente",
+    "fechar com pergunta simples"
+  ]
+}

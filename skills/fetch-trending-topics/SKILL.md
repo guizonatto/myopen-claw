@@ -3,7 +3,7 @@ name: x-trending
 description: "Use esta skill quando o usuário pedir para verificar os trending topics no X (Twitter). Ela detalha como usar a ferramenta 'browser' interna do OpenClaw para extrair as tendências da rede social de forma autônoma."
 metadata:
   openclaw:
-    model: usage-router/groq/openai/gpt-oss-20b
+    model: usage-router/cerebras/gpt-oss-120b
 ---
 
 # X (Twitter) Trending Topics Crawler

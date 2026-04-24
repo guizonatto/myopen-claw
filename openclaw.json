@@ -50,7 +50,7 @@
         "command": "npx",
         "args": [
           "-y",
-          "obsidian-mcp",
+          "obsidian-mcp@1.0.6",
           "/vault"
         ],
         "type": "stdio"
@@ -115,6 +115,15 @@
           "requireMention": true
         }
       }
+    },
+    "discord": {
+      "enabled": true,
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "${DISCORD_GUILD_ID}": {
+          "requireMention": false
+        }
+      }
     }
   },
   "session": {
@@ -154,7 +163,6 @@
         "primary": "usage-router/groq/llama-3.1-8b-instant",
         "fallbacks": [
           "usage-router/groq/openai/gpt-oss-20b",
-          "usage-router/groq/openai/gpt-oss-safeguard-20b",
           "usage-router/groq/qwen/qwen3-32b",
           "usage-router/groq/openai/gpt-oss-120b",
           "usage-router/groq/llama-3.3-70b-versatile",
@@ -426,7 +434,55 @@
         "default": true,
         "workspace": "~/.openclaw/workspace",
         "subagents": {
-          "allowAgents": ["librarian"]
+          "allowAgents": ["librarian", "researcher"]
+        }
+      },
+      {
+        "id": "leads",
+        "name": "Prospector",
+        "workspace": "~/.openclaw/workspace-leads",
+        "tools": {
+          "allow": ["exec", "read", "cron", "sessions_list"],
+          "deny": ["browser", "canvas", "write", "edit"]
+        },
+        "subagents": { "allowAgents": ["researcher"] }
+      },
+      {
+        "id": "content",
+        "name": "Copywriter",
+        "workspace": "~/.openclaw/workspace-content",
+        "tools": {
+          "allow": ["exec", "read", "web_search", "web_fetch", "browser", "cron"]
+        },
+        "subagents": { "allowAgents": ["researcher"] }
+      },
+      {
+        "id": "intel",
+        "name": "Sentinel",
+        "workspace": "~/.openclaw/workspace-intel",
+        "tools": {
+          "allow": ["exec", "read", "web_search", "web_fetch", "cron"],
+          "deny": ["browser", "canvas"]
+        },
+        "subagents": { "allowAgents": ["researcher"] }
+      },
+      {
+        "id": "ops",
+        "name": "Steward",
+        "workspace": "~/.openclaw/workspace-ops",
+        "tools": {
+          "allow": ["exec", "read", "cron"],
+          "deny": ["browser", "canvas", "write", "edit"]
+        },
+        "subagents": { "allowAgents": ["researcher"] }
+      },
+      {
+        "id": "researcher",
+        "name": "Analyst",
+        "workspace": "~/.openclaw/workspace-researcher",
+        "tools": {
+          "allow": ["exec", "read", "web_search", "web_fetch", "browser"],
+          "deny": ["cron", "canvas"]
         }
       },
       {
@@ -438,6 +494,77 @@
         }
       },
       {
+        "id": "sim-control",
+        "name": "Sales Simulation Control",
+        "workspace": "~/.openclaw/workspace-sim-control",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": ["exec", "read"],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "cron",
+            "browser",
+            "canvas",
+            "write",
+            "edit"
+          ]
+        }
+      },
+      {
+        "id": "sales-sim",
+        "name": "Sales Simulator",
+        "workspace": "~/.openclaw/workspace-sales-sim",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": ["read"],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "exec",
+            "cron",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "write",
+            "edit",
+            "mcp-crm"
+          ]
+        }
+      },
+      {
+        "id": "sindico-sim",
+        "name": "Sindico Simulator",
+        "workspace": "~/.openclaw/workspace-sindico-sim",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": ["read"],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "exec",
+            "cron",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "write",
+            "edit",
+            "mcp-crm"
+          ]
+        }
+      },
+      {
         "id": "librarian",
         "name": "Librarian",
         "workspace": "/vault"
@@ -445,6 +572,16 @@
     ]
   },
   "bindings": [
+    {
+      "agentId": "sim-control",
+      "match": {
+        "channel": "discord",
+        "peer": {
+          "kind": "group",
+          "id": "${DISCORD_SALES_SIM_CHANNEL_ID}"
+        }
+      }
+    },
     {
       "agentId": "default",
       "match": {
