@@ -13,6 +13,31 @@ def _normalize_phone(value: str) -> str:
     return re.sub(r"\D+", "", (value or "").strip())
 
 
+def _br_phone_variants(phone: str) -> list[str]:
+    """Gera variantes de número celular brasileiro (12 vs 13 dígitos).
+
+    O Brasil adicionou o 9º dígito aos celulares; o WhatsApp pode estar
+    cadastrado com o formato antigo (8 dígitos) ou novo (9 dígitos).
+
+    Exemplos:
+      5541999159953 (13) → tenta também 554199159953 (12)
+      554199159953  (12) → tenta também 5541999159953 (13)
+    """
+    if not phone.startswith("55") or len(phone) not in (12, 13):
+        return [phone]
+    ddd = phone[2:4]
+    rest = phone[4:]
+    if len(phone) == 13 and rest.startswith("9"):
+        return [phone, "55" + ddd + rest[1:]]
+    if len(phone) == 12:
+        return [phone, "55" + ddd + "9" + rest]
+    return [phone]
+
+
+def _is_not_found(result: dict[str, Any]) -> bool:
+    return result.get("status_code") == 404 or "not found" in str(result.get("response", "")).lower()
+
+
 def human_delay_ms(message: str) -> int:
     """40ms por caractere + jitter, clamp entre 1500ms e 8000ms."""
     base = len((message or "").strip()) * 40
@@ -144,6 +169,10 @@ def send_whatsapp_messages(
         and (os.environ.get("EVOLUTION_API_KEY") or "").strip()
     )
 
+    # Resolve formato brasileiro (9º dígito): tenta variante alternativa em 404
+    phone_variants = _br_phone_variants(phone)
+    active_phone = phone_variants[0]
+
     read_delay_applied_ms = max(int(pre_read_delay_ms or 0), 0)
     if read_delay_applied_ms > 0:
         sleep_fn(read_delay_applied_ms / 1000.0)
@@ -153,15 +182,25 @@ def send_whatsapp_messages(
         delay_ms = human_delay_ms(message)
         try:
             if use_evolution:
-                result = _send_via_evolution(phone, message, delay_ms=delay_ms, timeout=timeout)
+                result = _send_via_evolution(active_phone, message, delay_ms=delay_ms, timeout=timeout)
+                # Fallback automático de formato BR: se 404, tenta variante alternativa
+                if _is_not_found(result) and len(phone_variants) > 1:
+                    alt_phone = phone_variants[1]
+                    result = _send_via_evolution(alt_phone, message, delay_ms=delay_ms, timeout=timeout)
+                    if result.get("ok"):
+                        active_phone = alt_phone  # mantém formato que funcionou para próximas msgs
+                        result["note"] = f"Formato BR resolvido: {phone} → {alt_phone}"
             else:
-                # Fallback: sem suporte nativo de presence no gateway.
-                # Mantemos pausa local para preservar timing humano.
                 sleep_fn(delay_ms / 1000.0)
-                result = _send_via_gateway(phone, message, timeout=timeout)
+                result = _send_via_gateway(active_phone, message, timeout=timeout)
+                if _is_not_found(result) and len(phone_variants) > 1:
+                    alt_phone = phone_variants[1]
+                    result = _send_via_gateway(alt_phone, message, timeout=timeout)
+                    if result.get("ok"):
+                        active_phone = alt_phone
+                        result["note"] = f"Formato BR resolvido: {phone} → {alt_phone}"
                 result["delay_ms"] = delay_ms
                 result["presence"] = "local_delay_fallback"
-                result["note"] = "Gateway sem presence nativo; aplicado delay local."
         except Exception as exc:
             result = {
                 "provider": "evolution" if use_evolution else "openclaw_gateway",

@@ -124,6 +124,7 @@ services:
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
       - ./openclaw.json:/opt/openclaw-bootstrap/openclaw.json
       - ./skills:/opt/openclaw-bootstrap/workspace/skills
+      - ./skills:/app/skills:ro
       - ./configs:/opt/openclaw-bootstrap/workspace/configs
       - ./crons:/opt/openclaw-bootstrap/workspace/crons
       - ./scripts:/opt/openclaw-bootstrap/workspace/scripts
@@ -196,6 +197,11 @@ services:
       - MODEL_USAGE_DB_PATH=/data/llm-usage.sqlite3
       - MODEL_USAGE_REPORT_TIMEZONE=${MODEL_USAGE_REPORT_TIMEZONE:-America/Sao_Paulo}
       - MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID=${MODEL_USAGE_REPORT_DISCORD_CHANNEL_ID:-}
+      - DISCORD_ERROR_WEBHOOK_URL=${DISCORD_ERROR_WEBHOOK_URL:-}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1
     entrypoint:
       - /bin/bash
       - /usr/local/bin/entrypoint.sh
@@ -283,6 +289,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://openclaw:openclaw@postgres:5432/openclaw
       - MCP_API_KEY=${MCP_API_KEY}
+      - EVOLUTION_URL=http://openclaw-evolution-api:8080
+      - EVOLUTION_INSTANCE=zind
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
     volumes:
       - ./mcps/crm_mcp:/app
       - ./mcp-crm-data:/mcp-crm

@@ -62,6 +62,26 @@ Equipe OpenClaw
 - Explicação das funcionalidades:
   - ...
 
+## Kanban Metrics
+```
+📊 **Kanban — Semana XX/YYYY**
+
+**Velocity (4 meses)**
+- Média: X issues/semana | Tendência: acelerando / estável / desacelerando
+- Últimas 4 semanas: [W1: N, W2: N, W3: N, W4: N]
+
+**Lead Time**
+- p50 (mediana): X dias
+- p85: X dias (90% das entregas ficam abaixo disto)
+
+**WIP atual**: X itens em andamento
+🔴 Bloqueados (>30d): [KEY] Título — Xd parado — Assignee
+🟡 Em risco (15–30d): [KEY] Título — Xd — Assignee
+
+**Recomendações**
+1. ...
+```
+
 ## Notion
 - Título: Release vX.Y.Z — DD/MM/YYYY
 - Data
@@ -70,3 +90,4 @@ Equipe OpenClaw
 - Links
 - Tags
 - Entregas Jira
+- Kanban Metrics (velocity, lead time, WIP)

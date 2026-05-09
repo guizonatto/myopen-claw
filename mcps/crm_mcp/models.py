@@ -201,3 +201,93 @@ Index(
 )
 
 Index('idx_message_strategy_outcomes_strategy_key', MessageStrategyOutcome.strategy_key)
+
+
+class IncomingMessageBuffer(Base, SerializableMixin):
+    __tablename__ = "incoming_message_buffers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    contato_id = Column(UUID(as_uuid=True), ForeignKey("crm_mcp.contatos.id", ondelete="CASCADE"), nullable=False)
+    channel = Column(Text, nullable=False, server_default="whatsapp")
+    status = Column(Text, nullable=False, server_default="open")
+    flush_reason = Column(Text, nullable=True)
+    grouped_count = Column(Integer, nullable=False, server_default="0")
+    payload_json = Column(Text, nullable=True)
+    flushed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class FeedbackReviewSession(Base, SerializableMixin):
+    __tablename__ = "feedback_review_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    batch_id = Column(Text, nullable=False)
+    stage = Column(Text, nullable=True)
+    city = Column(Text, nullable=True)
+    client_type = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, server_default="open")
+    channel = Column(Text, nullable=False, server_default="discord")
+    thread_ref = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+
+
+class FeedbackReviewEntry(Base, SerializableMixin):
+    __tablename__ = "feedback_review_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("crm_mcp.feedback_review_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    author = Column(Text, nullable=False, server_default="sales_reviewer")
+    feedback_text = Column(Text, nullable=False)
+    tags_json = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+
+
+class StrategyUpdateProposal(Base, SerializableMixin):
+    __tablename__ = "strategy_update_proposals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("crm_mcp.feedback_review_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    proposal_batch_id = Column(Text, nullable=False, unique=True)
+    status = Column(Text, nullable=False, server_default="draft_review")
+    proposed_by = Column(Text, nullable=True)
+    approved_by = Column(Text, nullable=True)
+    rejected_reason = Column(Text, nullable=True)
+    proposal_json = Column(Text, nullable=False)
+    decision_notes = Column(Text, nullable=True)
+
+
+class OperationAuditLog(Base, SerializableMixin):
+    __tablename__ = "operation_audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    actor = Column(Text, nullable=False, server_default="system")
+    role = Column(Text, nullable=False, server_default="system")
+    operation = Column(Text, nullable=False)
+    resource_id = Column(Text, nullable=True)
+    status = Column(Text, nullable=False)
+    reason = Column(Text, nullable=True)
+    before_json = Column(Text, nullable=True)
+    after_json = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+
+
+Index("idx_incoming_message_buffers_lookup", IncomingMessageBuffer.contato_id, IncomingMessageBuffer.status)
+Index("idx_feedback_review_sessions_batch", FeedbackReviewSession.batch_id, FeedbackReviewSession.status)
+Index("idx_feedback_review_entries_session", FeedbackReviewEntry.session_id, FeedbackReviewEntry.created_at)
+Index("idx_strategy_update_proposals_status", StrategyUpdateProposal.status, StrategyUpdateProposal.created_at)
+Index("idx_operation_audit_logs_lookup", OperationAuditLog.operation, OperationAuditLog.status, OperationAuditLog.created_at)

@@ -362,8 +362,50 @@ def record_usage_event(conn: sqlite3.Connection, event: UsageEvent) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PostgreSQL support
+# PostgreSQL support — full migration (usage_events + rate_buckets + model_limits + dispatches)
 # ---------------------------------------------------------------------------
+
+_PG_CREATE_ALL = """
+CREATE TABLE IF NOT EXISTS llm_model_limits (
+  id          BIGSERIAL PRIMARY KEY,
+  provider    TEXT NOT NULL,
+  model       TEXT NOT NULL,
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  disabled_reason TEXT,
+  context_window  INTEGER,
+  max_output_tokens INTEGER,
+  rpm  INTEGER,
+  rpd  INTEGER,
+  tpm  INTEGER,
+  tpd  INTEGER,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(provider, model)
+);
+
+CREATE TABLE IF NOT EXISTS llm_model_rate_buckets (
+  id          BIGSERIAL PRIMARY KEY,
+  provider    TEXT NOT NULL,
+  model       TEXT NOT NULL,
+  bucket_kind TEXT NOT NULL,
+  bucket_start TEXT NOT NULL,
+  requests    INTEGER NOT NULL DEFAULT 0,
+  tokens      INTEGER NOT NULL DEFAULT 0,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(provider, model, bucket_kind, bucket_start)
+);
+CREATE INDEX IF NOT EXISTS idx_llm_rate_buckets_lookup
+  ON llm_model_rate_buckets (provider, model, bucket_kind, bucket_start);
+
+CREATE TABLE IF NOT EXISTS llm_report_dispatches (
+  id          BIGSERIAL PRIMARY KEY,
+  report_key  TEXT NOT NULL,
+  bucket_start TEXT NOT NULL,
+  channel     TEXT NOT NULL,
+  target      TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(report_key, bucket_start, channel, target)
+);
+"""
 
 _PG_CREATE_USAGE_EVENTS = """
 CREATE TABLE IF NOT EXISTS llm_usage_events (
@@ -432,6 +474,26 @@ def connect_pg(pg_url: str) -> Any:
         return None
 
 
+def ensure_pg_conn(pg_conn: Any, pg_url: str) -> Any:
+    """Return a live connection, reconnecting if closed."""
+    if pg_conn is None:
+        return connect_pg(pg_url)
+    try:
+        import psycopg2
+        if pg_conn.closed:
+            return connect_pg(pg_url)
+        # ping
+        with pg_conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        return pg_conn
+    except Exception:
+        try:
+            pg_conn.close()
+        except Exception:
+            pass
+        return connect_pg(pg_url)
+
+
 def initialize_pg_schema(pg_conn: Any) -> None:
     with pg_conn.cursor() as cur:
         cur.execute(_PG_CREATE_USAGE_EVENTS)
@@ -482,6 +544,222 @@ def record_usage_event_pg(pg_conn: Any, event: UsageEvent) -> None:
         except Exception:
             pass
         raise
+
+
+def initialize_pg_schema_full(pg_conn: Any) -> None:
+    """Create all 4 tables in PostgreSQL (idempotent)."""
+    with pg_conn.cursor() as cur:
+        cur.execute(_PG_CREATE_ALL)
+        cur.execute(_PG_CREATE_USAGE_EVENTS)
+    pg_conn.commit()
+
+
+def get_model_limits_pg(pg_conn: Any, provider: str, model: str) -> "ModelLimits | None":
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM llm_model_limits WHERE provider=%s AND model=%s",
+                (provider, model),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        cols = [d[0] for d in cur.description] if hasattr(cur, "description") else []
+        r = dict(zip(cols, row))
+        return ModelLimits(
+            provider=r["provider"],
+            model=r["model"],
+            enabled=bool(r["enabled"]),
+            disabled_reason=r.get("disabled_reason"),
+            context_window=r.get("context_window"),
+            max_output_tokens=r.get("max_output_tokens"),
+            rpm=r.get("rpm"),
+            rpd=r.get("rpd"),
+            tpm=r.get("tpm"),
+            tpd=r.get("tpd"),
+            updated_at=r.get("updated_at"),
+        )
+    except Exception as exc:
+        logger.error("pg get_model_limits failed: %s", exc)
+        return None
+
+
+def upsert_model_limits_pg(pg_conn: Any, limits: "ModelLimits") -> None:
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO llm_model_limits
+                  (provider, model, enabled, disabled_reason, context_window,
+                   max_output_tokens, rpm, rpd, tpm, tpd, updated_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                ON CONFLICT (provider, model) DO UPDATE SET
+                  enabled          = EXCLUDED.enabled,
+                  disabled_reason  = EXCLUDED.disabled_reason,
+                  context_window   = EXCLUDED.context_window,
+                  max_output_tokens= EXCLUDED.max_output_tokens,
+                  rpm = EXCLUDED.rpm, rpd = EXCLUDED.rpd,
+                  tpm = EXCLUDED.tpm, tpd = EXCLUDED.tpd,
+                  updated_at = NOW()
+                """,
+                (limits.provider, limits.model, limits.enabled, limits.disabled_reason,
+                 limits.context_window, limits.max_output_tokens,
+                 limits.rpm, limits.rpd, limits.tpm, limits.tpd),
+            )
+        pg_conn.commit()
+    except Exception as exc:
+        logger.error("pg upsert_model_limits failed: %s", exc)
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
+        raise
+
+
+def was_report_dispatched_pg(pg_conn: Any, report_key: str, bucket_start: str,
+                              channel: str, target: str) -> bool:
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                """SELECT 1 FROM llm_report_dispatches
+                   WHERE report_key=%s AND bucket_start=%s AND channel=%s AND target=%s
+                   LIMIT 1""",
+                (report_key, bucket_start, channel, target),
+            )
+            return cur.fetchone() is not None
+    except Exception as exc:
+        logger.error("pg was_report_dispatched failed: %s", exc)
+        return False
+
+
+def mark_report_dispatched_pg(pg_conn: Any, report_key: str, bucket_start: str,
+                               channel: str, target: str) -> None:
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO llm_report_dispatches (report_key, bucket_start, channel, target)
+                   VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+                (report_key, bucket_start, channel, target),
+            )
+        pg_conn.commit()
+    except Exception as exc:
+        logger.error("pg mark_report_dispatched failed: %s", exc)
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
+
+
+def rate_limit_check_and_record_pg(
+    pg_conn: Any,
+    *,
+    provider: str,
+    model: str,
+    bucket_minute: str,
+    bucket_day: str,
+    token_inc: int,
+    rpm: "int | None",
+    tpm: "int | None",
+    rpd: "int | None",
+    tpd: "int | None",
+) -> "tuple[bool, str | None]":
+    """Atomic check-and-increment using PostgreSQL row-level locking (no file lock)."""
+    if rpm is None and tpm is None and rpd is None and tpd is None:
+        return True, None
+    if tpm is not None and token_inc > int(tpm):
+        return False, f"request_exceeds_tpm: request={token_inc} tpm_limit={tpm}"
+
+    try:
+        with pg_conn.cursor() as cur:
+            # Ensure rows exist, then lock them
+            for kind, start in [("minute", bucket_minute), ("day", bucket_day)]:
+                cur.execute(
+                    """INSERT INTO llm_model_rate_buckets
+                         (provider, model, bucket_kind, bucket_start, requests, tokens)
+                       VALUES (%s,%s,%s,%s,0,0)
+                       ON CONFLICT (provider, model, bucket_kind, bucket_start) DO NOTHING""",
+                    (provider, model, kind, start),
+                )
+
+            # Lock rows for this provider/model atomically
+            cur.execute(
+                """SELECT bucket_kind, requests, tokens
+                   FROM llm_model_rate_buckets
+                   WHERE provider=%s AND model=%s
+                     AND bucket_kind = ANY(%s)
+                     AND bucket_start = ANY(%s)
+                   FOR UPDATE""",
+                (provider, model,
+                 ["minute", "day"],
+                 [bucket_minute, bucket_day]),
+            )
+            rows = {r[0]: (int(r[1] or 0), int(r[2] or 0)) for r in cur.fetchall()}
+            min_reqs, min_toks = rows.get("minute", (0, 0))
+            day_reqs, day_toks = rows.get("day", (0, 0))
+
+            # Check limits
+            if rpm is not None and min_reqs + 1 > int(rpm):
+                pg_conn.rollback()
+                return False, f"rpm_limit_exceeded: limit={rpm} used={min_reqs}"
+            if tpm is not None and min_toks + token_inc > int(tpm):
+                pg_conn.rollback()
+                return False, f"tpm_limit_exceeded: limit={tpm} used={min_toks}"
+            if rpd is not None and day_reqs + 1 > int(rpd):
+                pg_conn.rollback()
+                return False, f"rpd_limit_exceeded: limit={rpd} used={day_reqs}"
+            if tpd is not None and day_toks + token_inc > int(tpd):
+                pg_conn.rollback()
+                return False, f"tpd_limit_exceeded: limit={tpd} used={day_toks}"
+
+            # Increment
+            for kind, start in [("minute", bucket_minute), ("day", bucket_day)]:
+                cur.execute(
+                    """UPDATE llm_model_rate_buckets
+                       SET requests = requests + 1, tokens = tokens + %s, updated_at = NOW()
+                       WHERE provider=%s AND model=%s AND bucket_kind=%s AND bucket_start=%s""",
+                    (token_inc, provider, model, kind, start),
+                )
+        pg_conn.commit()
+        return True, None
+    except Exception as exc:
+        logger.error("pg rate_limit_check failed: %s", exc)
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
+        raise
+
+
+def rate_limit_add_tokens_pg(
+    pg_conn: Any,
+    *,
+    provider: str,
+    model: str,
+    bucket_minute: str,
+    bucket_day: str,
+    tokens: int,
+) -> None:
+    if tokens <= 0:
+        return
+    try:
+        with pg_conn.cursor() as cur:
+            for kind, start in [("minute", bucket_minute), ("day", bucket_day)]:
+                cur.execute(
+                    """INSERT INTO llm_model_rate_buckets
+                         (provider, model, bucket_kind, bucket_start, requests, tokens)
+                       VALUES (%s,%s,%s,%s,0,%s)
+                       ON CONFLICT (provider, model, bucket_kind, bucket_start)
+                       DO UPDATE SET tokens = llm_model_rate_buckets.tokens + EXCLUDED.tokens,
+                                     updated_at = NOW()""",
+                    (provider, model, kind, start, tokens),
+                )
+        pg_conn.commit()
+    except Exception as exc:
+        logger.error("pg rate_limit_add_tokens failed: %s", exc)
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
 
 
 def _compute_token_quality(exact_total: int, estimated_total: int) -> str:

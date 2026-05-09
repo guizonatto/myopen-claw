@@ -8,5 +8,60 @@
     "signal_caos": "mencionar excesso de mensagens e falta de previsibilidade",
     "signal_retrabalho": "mencionar retrabalho em follow-up e pagamento",
     "signal_perda": "mencionar risco de perder oportunidades por demora"
+  },
+  "protocolo_contato_direto": {
+    "_doc": "Sequência canônica do Protocolo 1 — síndico profissional identificado. Cada ação = 1 turno.",
+    "acao_1_msg1": "Oi",
+    "acao_1_msg2_com_fonte": "{quem_indicou_ou_fonte} passou seu contato. Você ainda atua com sindicatura profissional?",
+    "acao_1_msg2_sem_fonte": "Você ainda atua com sindicatura profissional?",
+    "acao_1_connection_trigger": "Oi {nome}, tudo bem? Vi seu contato no {fonte} como síndico profissional.",
+    "acao_2_competitor_discovery": "Legal! Hoje, para gerenciar os condomínios, você usa algum sistema específico ou faz pelo Excel?",
+    "acao_3_introduce_yourself": "Eu sou o Rafa, do time da Zind (zind.pro) — sistema feito pra síndicos. Com {ferramenta_revelada} é comum ter {dor_classica}.",
+    "acao_3_value_mirror": "Entendi! A Zind ajuda justamente a resolver, exclusiva para síndicos.",
+    "acao_3_with_tool": "Com {ferramenta_revelada} é comum ter {dor_classica}. A Zind foi criada pra síndicos que querem resolver isso.",
+    "acao_4_founder_cta": "Faz sentido batermos um papo rápido de 10 min com nosso fundador para você dar uma olhada?",
+    "variantes_fonte": {
+      "instagram": "no Instagram como síndico profissional",
+      "google": "no Google como síndico profissional",
+      "grupo_whatsapp": "no grupo de síndicos",
+      "indicacao": "por indicação"
+    },
+    "dores_classicas_por_ferramenta": {
+      "excel": "retrabalho em cobranças e relatórios manuais",
+      "whatsapp": "mensagens perdidas e follow-up sem controle",
+      "administradora": "falta de visibilidade em tempo real",
+      "nenhum": "decisões sem histórico registrado"
+    }
+  },
+  "gatekeeper": {
+    "_doc": "Protocolo 2 — navegação de chatbot e abordagem ao gatekeeper humano.",
+    "etapa_1_bypass": "Falar com atendente.",
+    "etapa_1_bypass_fallback": "Falar com humano.",
+    "etapa_1_menu_keywords": ["Outros", "Atendimento", "Suporte", "Falar com", "Opção", "Digite"],
+    "etapa_2_gatekeeper_question": "Oi, tudo bem? Quem é a melhor pessoa da equipe para eu falar sobre um sistema de gestão exclusivo para síndicos?",
+    "etapa_1b_mensagem_com_pedido_contato": "Sou o Rafa da Zind (zind.pro). Preciso falar com o síndico responsável sobre um sistema exclusivo pra síndicos profissionais. Me passa o contato direto dele? Obrigado!"
+  },
+  "protocolo_indicacao": {
+    "_doc": "Protocolo de abertura quando o lead foi indicado por alguém. Usar em cold-contact Passo 6 e no outreach do qualifier Etapa 1D.",
+    "msg1": "Oi",
+    "msg2_com_nome": "{quem_indicou} passou seu contato, {nome_indicado}. Você ainda atua com sindicatura profissional?",
+    "msg2_sem_nome": "{quem_indicou} passou seu contato. Você ainda atua com sindicatura profissional?",
+    "com_nome": "Olá {nome_indicado}! {quem_indicou} passou seu contato como responsável pela sindicatura. Tudo bem?",
+    "sem_nome": "Olá! {quem_indicou} passou seu contato como responsável pela sindicatura. Tudo bem?",
+    "_regras": "SEMPRE 2 mensagens separadas: msg1='Oi', msg2=fonte + qualificação. Máx 180 chars por msg. Sem pitch. Aguardar resposta antes de avançar."
+  },
+  "objections_extended": {
+    "objection_already_has_solution": {
+      "acao": "Não contradiga. Explore o que falta na solução atual.",
+      "script": "Faz sentido! O que você ainda sente falta nessa solução hoje?"
+    },
+    "objection_competitor": {
+      "acao": "Não cite o concorrente pelo nome. Pergunte sobre o gap.",
+      "script": "Entendo. O que foi decisivo na escolha? Pergunto porque às vezes tem um ponto que não estava cobrindo."
+    },
+    "request_proof": {
+      "acao": "Oferecer material concreto disponível — nunca inventar.",
+      "script": "Posso mandar um vídeo rápido de como funciona na prática? Fica mais fácil visualizar."
+    }
   }
 }

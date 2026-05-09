@@ -179,3 +179,78 @@ CREATE TABLE IF NOT EXISTS message_strategy_rankings (
 );
 CREATE INDEX IF NOT EXISTS idx_message_strategy_rankings_lookup
     ON message_strategy_rankings (stage, client_type, city, region, channel, message_archetype);
+
+CREATE TABLE IF NOT EXISTS incoming_message_buffers (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    contato_id      UUID NOT NULL REFERENCES contatos(id) ON DELETE CASCADE,
+    channel         TEXT NOT NULL DEFAULT 'whatsapp',
+    status          TEXT NOT NULL DEFAULT 'open',
+    flush_reason    TEXT,
+    grouped_count   INTEGER NOT NULL DEFAULT 0,
+    payload_json    TEXT,
+    flushed_at      TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_incoming_message_buffers_lookup
+    ON incoming_message_buffers (contato_id, status);
+
+CREATE TABLE IF NOT EXISTS feedback_review_sessions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    batch_id        TEXT NOT NULL,
+    stage           TEXT,
+    city            TEXT,
+    client_type     TEXT,
+    status          TEXT NOT NULL DEFAULT 'open',
+    channel         TEXT NOT NULL DEFAULT 'discord',
+    thread_ref      TEXT,
+    metadata_json   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_review_sessions_batch
+    ON feedback_review_sessions (batch_id, status);
+
+CREATE TABLE IF NOT EXISTS feedback_review_entries (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    session_id      UUID NOT NULL REFERENCES feedback_review_sessions(id) ON DELETE CASCADE,
+    author          TEXT NOT NULL DEFAULT 'sales_reviewer',
+    feedback_text   TEXT NOT NULL,
+    tags_json       TEXT,
+    metadata_json   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_review_entries_session
+    ON feedback_review_entries (session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS strategy_update_proposals (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    session_id          UUID NOT NULL REFERENCES feedback_review_sessions(id) ON DELETE CASCADE,
+    proposal_batch_id   TEXT NOT NULL UNIQUE,
+    status              TEXT NOT NULL DEFAULT 'draft_review',
+    proposed_by         TEXT,
+    approved_by         TEXT,
+    rejected_reason     TEXT,
+    proposal_json       TEXT NOT NULL,
+    decision_notes      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_strategy_update_proposals_status
+    ON strategy_update_proposals (status, created_at);
+
+CREATE TABLE IF NOT EXISTS operation_audit_logs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    actor           TEXT NOT NULL DEFAULT 'system',
+    role            TEXT NOT NULL DEFAULT 'system',
+    operation       TEXT NOT NULL,
+    resource_id     TEXT,
+    status          TEXT NOT NULL,
+    reason          TEXT,
+    before_json     TEXT,
+    after_json      TEXT,
+    error           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_lookup
+    ON operation_audit_logs (operation, status, created_at);

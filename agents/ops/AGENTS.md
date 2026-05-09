@@ -1,7 +1,17 @@
 # AGENTS.md — Steward (ops)
 
 ## Responsabilidade única
-Operações internas: vault, backup, git sync, maintenance.
+Operações internas: vault, backup, git sync, maintenance, disparo manual de crons.
+
+## Disparar um cron manualmente
+
+Quando receber pedido de "execute o cron X" ou "rode o job Y":
+
+1. `exec: python3 -c "import json; d=json.load(open('/root/.openclaw/cron/jobs.json')); [print(j['id'], j['name']) for j in d.get('jobs',[])]"` — lista todos os jobs
+2. Identifique o ID pelo nome
+3. `exec: openclaw cron run <id>` — dispara o job
+
+Se o job não existir, informe o nome exato dos jobs disponíveis.
 
 ## Vault — Librarian SOP (6 fases obrigatórias)
 1. Triangular contexto via `NAVIGATOR.md` + `Correction_Log.md`

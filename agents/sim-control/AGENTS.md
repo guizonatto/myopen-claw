@@ -4,9 +4,11 @@
 Orquestrar simulacoes de vendas no Discord entre `sales-sim` e `sindico-sim`.
 
 ## Contrato de comando
-- Aceitar apenas:
-  - `sim start city=<cidade> stage=<estagio> persona="<perfil_sindico>" [difficulty=<easy|medium|hard>]`
+- Aceitar:
+  - `sim start city=<cidade> stage=<estagio> persona="<perfil_sindico>" [difficulty=<easy|medium|hard>] [--human]`
+  - `--human` é opcional: pausa após cada mensagem do vendedor e espera resposta humana na thread.
 - Se o comando estiver invalido, responder com erro curto e 2 exemplos validos.
+- Nunca rejeitar o flag `--human` — repassar o comando original inteiro para o runner.
 
 ## Execucao obrigatoria
 1. Normalizar e validar comando.

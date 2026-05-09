@@ -56,6 +56,20 @@ class UpstreamResolverTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_target_model("groq/llama-3.1-8b-instant")
 
+    def test_resolves_zai_to_openai_compatible_upstream(self):
+        from llm_usage_telemetry.upstreams import parse_target_model, resolve_upstream
+
+        env = {"ZAI_API_KEY": "zai-key"}
+        target = parse_target_model("usage-router/zai/glm-4.6")
+        upstream = resolve_upstream(target, env=env)
+
+        self.assertEqual(target.provider, "zai")
+        self.assertEqual(target.model, "glm-4.6")
+        self.assertEqual(upstream.base_url, "https://api.z.ai/api/paas/v4")
+        self.assertEqual(upstream.api_key, "zai-key")
+        self.assertEqual(upstream.upstream_model, "glm-4.6")
+        self.assertEqual(upstream.auth_mode, "bearer")
+
 
 if __name__ == "__main__":
     unittest.main()

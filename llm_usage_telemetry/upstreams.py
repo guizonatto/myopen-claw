@@ -17,6 +17,8 @@ ENV_VARS:
   - OPENROUTER_API_KEY: chave do provider OpenRouter
   - OPENROUTER_BASE_URL: base URL do OpenRouter
   - OLLAMA_URL: base URL OpenAI-compatible/Ollama
+  - ZAI_API_KEY: chave do provider z.ai (modelos GLM)
+  - ZAI_BASE_URL: base URL do z.ai (default: https://api.z.ai/api/paas/v4)
 
 DB_TABLES:
   - (nenhuma)
@@ -120,6 +122,16 @@ def resolve_upstream(target: TargetModel, env: dict[str, str] | None = None) -> 
         "ollama": (
             env_map.get("OLLAMA_URL", "http://host.docker.internal:11434/v1"),
             env_map.get("OLLAMA_API_KEY", "ollama-local"),
+            "bearer",
+        ),
+        "zai": (
+            env_map.get("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4"),
+            env_map.get("ZAI_API_KEY", ""),
+            "bearer",
+        ),
+        "openai": (
+            env_map.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            env_map.get("OPENAI_API_KEY", ""),
             "bearer",
         ),
     }

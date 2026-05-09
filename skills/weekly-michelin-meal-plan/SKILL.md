@@ -20,6 +20,13 @@ Generate a Michelin-level weekly meal plan (lunch for 1, dinner for 2) using loc
 - Lunch: 1 person; Dinner: 2 persons; No breakfast
 
 ## Requirements
+- Always load persisted culinary preferences before drafting the plan.
+  - Source of truth: MemClaw memory for the current user/session scope.
+  - Build `user_preferences.avoid_ingredients` from memory first, then merge any explicit runtime preferences.
+  - `avoid_ingredients` is a hard constraint and must be enforced in both meal plan and grocery list.
+- Synonym guardrails for exclusions:
+  - If any exclusion includes `cogumelo`, also exclude `mushroom` and `champignon`.
+  - If any exclusion includes `mushroom` or `champignon`, also exclude `cogumelo`.
 - If an ingredient will rot in <3 days, it must be used early in the week and in multiple meals if possible
 - Avoids repeating meals, but can repeat ingredients to minimize waste
 - Michelin-level recipes (creative, high-quality, but quick)

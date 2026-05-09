@@ -54,6 +54,27 @@
           "/vault"
         ],
         "type": "stdio"
+      },
+      "crm-proxy": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-crm",
+          "python",
+          "/app/proxy.py"
+        ]
+      },
+      "leads-proxy": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-leads",
+          "python3",
+          "/app/proxy.py"
+        ],
+        "type": "stdio"
       }
     }
   },
@@ -167,6 +188,8 @@
           "usage-router/groq/openai/gpt-oss-120b",
           "usage-router/groq/llama-3.3-70b-versatile",
           "usage-router/groq/meta-llama/llama-4-scout-17b-16e-instruct",
+          "usage-router/zai/glm-4.7-flash",
+          "usage-router/zai/glm-4.6",
           "usage-router/mistral/mistral-large-latest",
           "usage-router/mistral/mistral-medium-2508",
           "usage-router/mistral/mistral-small-latest",
@@ -176,12 +199,12 @@
           "usage-router/mistral/magistral-small-latest",
           "usage-router/cerebras/llama3.1-8b",
           "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
-          "usage-router/cerebras/qwen-3-235b-2507",
-          "usage-router/cerebras/gpt-oss-120b",
           "usage-router/qwen/qwen3.5-flash",
           "usage-router/qwen/qwen3.5-plus",
           "usage-router/deepseek/deepseek-chat",
           "usage-router/deepseek/deepseek-reasoner",
+          "usage-router/zai/glm-4.7-flash",
+          "usage-router/zai/glm-4.6",
           "usage-router/google/gemini-2.5-flash",
           "usage-router/google/gemini-2.5-flash-lite",
           "usage-router/google/gemini-2.5-pro",
@@ -249,11 +272,8 @@
         "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507": {
           "alias": "qwen-3-235b-a22b-instruct-2507"
         },
-        "usage-router/cerebras/qwen-3-235b-2507": {
-          "alias": "qwen-3-235b-2507"
-        },
-        "usage-router/cerebras/gpt-oss-120b": {
-          "alias": "gpt-oss-120b"
+        "usage-router/zai/glm-4.7-flash": {
+          "alias": "glm-4.7-flash"
         },
         "usage-router/qwen/qwen3.5-flash": {
           "alias": "qwen3.5-flash"
@@ -420,11 +440,17 @@
         "usage-router/ollama/gemma4:e2b": {
           "alias": "gemma4:e2b"
         },
+        "usage-router/ollama/gemma4:latest": {
+          "alias": "gemma4:latest"
+        },
         "usage-router/ollama/qwen3-embedding:0.6b": {
           "alias": "qwen3-embedding:0.6b"
         },
         "usage-router/openrouter/openai/gpt-5-mini": {
           "alias": "gpt-5-mini"
+        },
+        "usage-router/zai/glm-4.6": {
+          "alias": "glm-4.6"
         }
       }
     },
@@ -433,8 +459,33 @@
         "id": "default",
         "default": true,
         "workspace": "~/.openclaw/workspace",
+        "tools": {
+          "allow": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_list"
+          ],
+          "deny": [
+            "mcp-crm",
+            "mcp-leads",
+            "leads-proxy",
+            "mcp-trends",
+            "mcp-shopping",
+            "exec",
+            "write",
+            "edit",
+            "web_search",
+            "web_fetch",
+            "browser",
+            "cron"
+          ]
+        },
         "subagents": {
-          "allowAgents": ["librarian", "researcher"]
+          "allowAgents": [
+            "librarian",
+            "researcher",
+            "zind-crm-orchestrator"
+          ]
         }
       },
       {
@@ -442,47 +493,108 @@
         "name": "Prospector",
         "workspace": "~/.openclaw/workspace-leads",
         "tools": {
-          "allow": ["exec", "read", "cron", "sessions_list"],
-          "deny": ["browser", "canvas", "write", "edit"]
+          "deny": [
+            "mcp-crm",
+            "crm-proxy",
+            "mcp-shopping",
+            "mcp-trends",
+            "obsidian",
+            "browser",
+            "canvas",
+            "write",
+            "edit",
+            "web_search",
+            "web_fetch"
+          ]
         },
-        "subagents": { "allowAgents": ["researcher"] }
+        "subagents": {
+          "allowAgents": [
+            "researcher"
+          ]
+        }
       },
       {
         "id": "content",
         "name": "Copywriter",
         "workspace": "~/.openclaw/workspace-content",
         "tools": {
-          "allow": ["exec", "read", "web_search", "web_fetch", "browser", "cron"]
+          "allow": [
+            "exec",
+            "read",
+            "web_search",
+            "web_fetch",
+            "browser",
+            "cron"
+          ]
         },
-        "subagents": { "allowAgents": ["researcher"] }
+        "subagents": {
+          "allowAgents": [
+            "researcher"
+          ]
+        }
       },
       {
         "id": "intel",
         "name": "Sentinel",
         "workspace": "~/.openclaw/workspace-intel",
         "tools": {
-          "allow": ["exec", "read", "web_search", "web_fetch", "cron"],
-          "deny": ["browser", "canvas"]
+          "allow": [
+            "exec",
+            "read",
+            "web_search",
+            "web_fetch",
+            "cron"
+          ],
+          "deny": [
+            "browser",
+            "canvas"
+          ]
         },
-        "subagents": { "allowAgents": ["researcher"] }
+        "subagents": {
+          "allowAgents": [
+            "researcher"
+          ]
+        }
       },
       {
         "id": "ops",
         "name": "Steward",
         "workspace": "~/.openclaw/workspace-ops",
         "tools": {
-          "allow": ["exec", "read", "cron"],
-          "deny": ["browser", "canvas", "write", "edit"]
+          "allow": [
+            "exec",
+            "read",
+            "cron"
+          ],
+          "deny": [
+            "browser",
+            "canvas",
+            "write",
+            "edit"
+          ]
         },
-        "subagents": { "allowAgents": ["researcher"] }
+        "subagents": {
+          "allowAgents": [
+            "researcher"
+          ]
+        }
       },
       {
         "id": "researcher",
         "name": "Analyst",
         "workspace": "~/.openclaw/workspace-researcher",
         "tools": {
-          "allow": ["exec", "read", "web_search", "web_fetch", "browser"],
-          "deny": ["cron", "canvas"]
+          "allow": [
+            "exec",
+            "read",
+            "web_search",
+            "web_fetch",
+            "browser"
+          ],
+          "deny": [
+            "cron",
+            "canvas"
+          ]
         }
       },
       {
@@ -501,7 +613,10 @@
           "enabled": false
         },
         "tools": {
-          "allow": ["exec", "read"],
+          "allow": [
+            "exec",
+            "read"
+          ],
           "deny": [
             "sessions_send",
             "sessions_spawn",
@@ -517,12 +632,14 @@
       {
         "id": "sales-sim",
         "name": "Sales Simulator",
-        "workspace": "~/.openclaw/workspace-sales-sim",
+        "workspace": "c:/github/myopen-claw",
         "memorySearch": {
           "enabled": false
         },
         "tools": {
-          "allow": ["read"],
+          "allow": [
+            "read"
+          ],
           "deny": [
             "sessions_send",
             "sessions_spawn",
@@ -543,11 +660,20 @@
         "id": "sindico-sim",
         "name": "Sindico Simulator",
         "workspace": "~/.openclaw/workspace-sindico-sim",
+        "model": {
+          "primary": "usage-router/ollama/gemma4:e2b",
+          "fallbacks": [
+            "usage-router/ollama/gemma4:latest",
+            "usage-router/mistral/mistral-large-latest"
+          ]
+        },
         "memorySearch": {
           "enabled": false
         },
         "tools": {
-          "allow": ["read"],
+          "allow": [
+            "read"
+          ],
           "deny": [
             "sessions_send",
             "sessions_spawn",
@@ -568,6 +694,274 @@
         "id": "librarian",
         "name": "Librarian",
         "workspace": "/vault"
+      },
+      {
+        "id": "zind-crm-orchestrator",
+        "name": "Zind CRM Orchestrator",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-orchestrator",
+        "memorySearch": {
+          "enabled": false
+        },
+        "model": {
+          "primary": "usage-router/zai/glm-4.7-flash",
+          "fallbacks": [
+            "usage-router/google/gemini-2.5-flash",
+            "usage-router/mistral/mistral-large-latest"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy",
+            "sessions_send",
+            "sessions_list"
+          ],
+          "deny": [
+            "sessions_spawn",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "subagents": {
+          "allowAgents": [
+            "zind-crm-cold-contact",
+            "zind-crm-qualifier",
+            "zind-crm-closer",
+            "zind-crm-handover",
+            "zind-crm-reviewer"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
+      },
+      {
+        "id": "zind-crm-cold-contact",
+        "name": "Zind Cold Contact",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-cold-contact",
+        "memorySearch": {
+          "enabled": false
+        },
+        "model": {
+          "primary": "usage-router/zai/glm-4.7-flash",
+          "fallbacks": [
+            "usage-router/google/gemini-2.5-flash",
+            "usage-router/mistral/mistral-large-latest"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
+      },
+      {
+        "id": "zind-crm-qualifier",
+        "name": "Zind Qualifier",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-qualifier",
+        "memorySearch": {
+          "enabled": false
+        },
+        "model": {
+          "primary": "usage-router/zai/glm-4.7-flash",
+          "fallbacks": [
+            "usage-router/google/gemini-2.5-flash",
+            "usage-router/mistral/mistral-large-latest"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
+      },
+      {
+        "id": "zind-crm-closer",
+        "name": "Zind Closer",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-closer",
+        "memorySearch": {
+          "enabled": false
+        },
+        "model": {
+          "primary": "usage-router/zai/glm-4.7-flash",
+          "fallbacks": [
+            "usage-router/google/gemini-2.5-flash",
+            "usage-router/mistral/mistral-large-latest"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
+      },
+      {
+        "id": "zind-crm-cold-contact-adm",
+        "name": "Zind Cold Contact ADM",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-cold-contact-adm",
+        "memorySearch": {
+          "enabled": false
+        },
+        "model": {
+          "primary": "usage-router/mistral/mistral-large-latest",
+          "fallbacks": [
+            "usage-router/google/gemini-2.5-flash",
+            "usage-router/mistral/mistral-medium-2508"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
+      },
+      {
+        "id": "zind-crm-handover",
+        "name": "Zind Handover",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-handover",
+        "memorySearch": {
+          "enabled": false
+        },
+        "model": {
+          "primary": "usage-router/zai/glm-4.7-flash",
+          "fallbacks": [
+            "usage-router/google/gemini-2.5-flash",
+            "usage-router/mistral/mistral-large-latest"
+          ]
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
+      },
+      {
+        "id": "zind-crm-reviewer",
+        "name": "Zind Reviewer",
+        "workspace": "c:/github/myopen-claw/agents/zind-crm-reviewer",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": [
+            "read",
+            "crm-proxy"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "cron",
+            "exec",
+            "write",
+            "edit"
+          ]
+        },
+        "skills": [],
+        "skillsLimits": {
+          "maxSkillsPromptChars": 0
+        }
       }
     ]
   },
@@ -589,6 +983,15 @@
         "peer": {
           "kind": "direct",
           "id": "5541999159953"
+        }
+      }
+    },
+    {
+      "agentId": "zind-crm-orchestrator",
+      "match": {
+        "channel": "whatsapp",
+        "peer": {
+          "kind": "direct"
         }
       }
     },

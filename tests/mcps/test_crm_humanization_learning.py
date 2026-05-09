@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from mcps.crm_mcp.contatos import _is_bot_router_message
 from mcps.crm_mcp.conversation_engine import build_personalized_draft
 from mcps.crm_mcp.message_strategy import (
     compute_confidence,
@@ -126,6 +127,46 @@ def test_whatsapp_long_message_splits_into_2_or_3_chunks():
     assert payload["checks"]["anti_text_wall"] is True
 
 
+def test_human_direct_probe_uses_three_short_messages():
+    contato = _contact()
+    payload = build_personalized_draft(
+        contato,
+        channel="whatsapp",
+        strategy={
+            "strategy_key": "lead|condominio|sao_paulo|whatsapp|human_direct_probe_3step",
+            "message_archetype": "human_direct_probe_3step",
+            "template_hint": "3 mensagens curtas para validar contato",
+            "confidence": 0.2,
+        },
+    )
+
+    assert len(payload["messages"]) == 3
+    assert payload["messages"][0] == "Ola Joao, tudo bem?"
+    assert payload["messages"][1] == "Vi seu contato no Google."
+    assert payload["messages"][2] == "Voce ainda atende como sindico profissional?"
+    assert all(len(message) <= 120 for message in payload["messages"])
+
+
+def test_bot_router_vendor_pitch_mentions_materials():
+    contato = _contact()
+    payload = build_personalized_draft(
+        contato,
+        channel="whatsapp",
+        strategy={
+            "strategy_key": "lead|condominio|sao_paulo|whatsapp|bot_router_vendor_pitch",
+            "message_archetype": "bot_router_vendor_pitch",
+            "template_hint": "pitch para bot/portaria",
+            "confidence": 0.2,
+        },
+    )
+
+    joined = " ".join(payload["messages"]).lower()
+    assert "zind" in joined
+    assert "video" in joined
+    assert "site" in joined
+    assert "3 artigos" in joined
+
+
 def test_strategy_retrieval_precedence(monkeypatch):
     session = _StrategySession()
     monkeypatch.setattr("mcps.crm_mcp.message_strategy.random.random", lambda: 1.0)
@@ -139,6 +180,27 @@ def test_strategy_retrieval_precedence(monkeypatch):
     assert wildcard_city["retrieval_level"] == "wildcard_city"
     assert wildcard_city_channel["retrieval_level"] == "wildcard_city_channel"
     assert stage_global["retrieval_level"] == "stage_global"
+
+
+def test_archetype_hint_overrides_to_human_direct_strategy(monkeypatch):
+    session = _StrategySession()
+    monkeypatch.setattr("mcps.crm_mcp.message_strategy.random.random", lambda: 1.0)
+
+    selected = select_message_strategy(
+        session,
+        _contact(city="sao_paulo", client_type="condominio"),
+        channel="whatsapp",
+        archetype_hint="human_direct_probe_3step",
+    )
+
+    assert selected["message_archetype"] == "human_direct_probe_3step"
+    assert selected["retrieval_level"] == "archetype_override"
+
+
+def test_bot_router_keyword_detection():
+    assert _is_bot_router_message("Qual seu bloco e unidade?")
+    assert _is_bot_router_message("Digite seu apartamento para seguir.")
+    assert not _is_bot_router_message("Podemos marcar uma conversa amanha?")
 
 
 @pytest.mark.parametrize(

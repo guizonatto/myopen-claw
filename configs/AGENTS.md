@@ -4,6 +4,33 @@
 
 ---
 
+## Delegação de Domínios
+
+O agente default (Personal-Assistant) trata apenas o **domínio pessoal**.
+Para pedidos de trabalho, delegar ao agente `work` via `sessions_spawn`.
+
+### Quando usar o agente `work`
+- Resumo semanal GitHub/Jira (`github-weekly-summary`)
+- Monitoramento de editais FINEP/Inovativos (`edital_monitor`)
+- Monitor de negócios/concorrentes/mercado (`business-monitor`)
+- Digest de tech news (`tech-news-digest`)
+- Análise política/econômica (`politics_economy_monitor`)
+- Consulta ou qualificação de leads/CRM (`crm`, `sindico-leads`)
+
+### Quando usar o agente `ops`
+- Rodar crons, git sync vault, operações de sistema
+
+### Quando usar o agente `researcher`
+- Pesquisa aprofundada e sistemática na web
+
+### Quando usar o agente `librarian`
+- Processar e classificar notas no vault Obsidian
+
+### Skills deste agente (não delegar — tratar localmente)
+`shopping-tracker` · `vault` · `weekly-michelin-meal-plan` · `humanizer` · `deep-research`
+
+---
+
 ## Agentes Ativos
 
 | O que guardar | Onde | Como |

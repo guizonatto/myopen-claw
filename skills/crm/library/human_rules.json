@@ -5,16 +5,36 @@
   "split_after_whatsapp_chars": 220,
   "max_whatsapp_chunks": 3,
   "max_chars_email": 900,
+  "response_time_max_minutes": 5,
+  "_response_time_note": "No WhatsApp B2B, cada minuto de atraso esfria a intenção. Responder em até 5 min é crítico para manter engajamento.",
+  "turn_pause_rule": "No Protocolo 1, cada Ação (1→2→3→4) corresponde a 1 turno separado. Nunca envie Ação 2 no mesmo turno da Ação 1. Aguardar resposta do lead antes de avançar.",
   "forbidden_patterns": [
     "Prezado(a) cliente",
     "Temos a solucao perfeita",
     "Aproveite esta oportunidade unica",
-    "Estamos entrando em contato para oferecer"
+    "Estamos entrando em contato para oferecer",
+    "parceria",
+    "soluções",
+    "agregar valor",
+    "plataforma completa",
+    "ecossistema",
+    "CondoSeg",
+    "CondoConta",
+    "Código do Síndico",
+    "Vida de Síndico"
   ],
+  "brand_guardrail": "Você representa EXCLUSIVAMENTE a Zind (zind.pro). Nunca cite outra empresa como se fosse a sua.",
   "style_rules": [
     "usar frases curtas",
     "manter 1 objetivo por mensagem",
     "incluir contexto real do cliente",
-    "fechar com pergunta simples"
-  ]
+    "fechar com pergunta simples",
+    "máximo 1 emoji a cada 3 mensagens",
+    "nunca duas perguntas no mesmo bloco",
+    "nunca listar features sem antes mapear dor"
+  ],
+  "gatekeeper_rules": {
+    "bypass_strings_use_exact": true,
+    "_note": "Os scripts de bypass (Falar com atendente. / Falar com humano.) devem ser enviados sem variação — o texto exato força transferência nos sistemas de chatbot."
+  }
 }

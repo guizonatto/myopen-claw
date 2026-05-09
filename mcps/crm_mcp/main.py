@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import AsyncGenerator, Literal, Optional
+from typing import Any, AsyncGenerator, Literal, Optional
+
+try:
+    from pipes import crm_inbound_pipe
+except ImportError:  # pragma: no cover
+    crm_inbound_pipe = None  # type: ignore[assignment]
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -15,41 +20,61 @@ try:
     from .contatos import (
         add_contato,
         approve_first_touch,
+        approve_strategy_updates,
+        buffer_incoming_messages,
         create_personalized_outreach_draft,
         enrich_contact_data,
+        evaluate_dormant_leads,
         list_contacts_to_follow_up,
         log_conversation_event,
         mark_no_interest,
         qualify_contact_for_outreach,
+        record_human_feedback,
+        reject_strategy_updates,
+        route_conversation_turn,
         schedule_contact_task,
         search_contatos,
         send_daily_improvement_report,
         send_whatsapp_outreach,
+        start_feedback_review_session,
         sync_calendar_links,
+        transcribe_incoming_audio,
         update_contato,
         verify_contact_data,
+        generate_strategy_update_proposal,
     )
     from .db import get_session
+    from .models import OperationAuditLog
 except ImportError:  # pragma: no cover
     from auth import verify_api_key
     from contatos import (
         add_contato,
         approve_first_touch,
+        approve_strategy_updates,
+        buffer_incoming_messages,
         create_personalized_outreach_draft,
         enrich_contact_data,
+        evaluate_dormant_leads,
         list_contacts_to_follow_up,
         log_conversation_event,
         mark_no_interest,
         qualify_contact_for_outreach,
+        record_human_feedback,
+        reject_strategy_updates,
+        route_conversation_turn,
         schedule_contact_task,
         search_contatos,
         send_daily_improvement_report,
         send_whatsapp_outreach,
+        start_feedback_review_session,
         sync_calendar_links,
+        transcribe_incoming_audio,
         update_contato,
         verify_contact_data,
+        generate_strategy_update_proposal,
     )
     from db import get_session
+    from models import OperationAuditLog
 
 try:
     from mcp.server import Server
@@ -91,6 +116,16 @@ class CRMRequest(BaseModel):
         "mark_no_interest",
         "sync_calendar_links",
         "send_daily_improvement_report",
+        "buffer_incoming_messages",
+        "route_conversation_turn",
+        "transcribe_incoming_audio",
+        "evaluate_dormant_leads",
+        "start_feedback_review_session",
+        "record_human_feedback",
+        "generate_strategy_update_proposal",
+        "approve_strategy_updates",
+        "reject_strategy_updates",
+        "process_inbound_message",
     ]
     nome: Optional[str] = Field(default=None, description="Nome do contato")
     email: Optional[str] = Field(default=None)
@@ -164,6 +199,30 @@ class CRMRequest(BaseModel):
     incoming_text: Optional[str] = Field(default=None)
     simulate_read_delay: Optional[bool] = Field(default=True)
     read_delay_ms: Optional[int] = Field(default=None)
+    lead_id: Optional[str] = Field(default=None)
+    event_text: Optional[str] = Field(default=None)
+    message_id: Optional[str] = Field(default=None)
+    max_hold_ms: Optional[int] = Field(default=20000)
+    max_msgs: Optional[int] = Field(default=6)
+    max_chars: Optional[int] = Field(default=1000)
+    payload: Optional[dict] = Field(default=None)
+    system_event: Optional[str] = Field(default=None)
+    is_audio: Optional[bool] = Field(default=False)
+    media_ref: Optional[str] = Field(default=None)
+    transcript_hint: Optional[str] = Field(default=None)
+    ruleset: Optional[dict] = Field(default=None)
+    batch_id: Optional[str] = Field(default=None)
+    session_id: Optional[str] = Field(default=None)
+    feedback_text: Optional[str] = Field(default=None)
+    tags: Optional[list[str]] = Field(default=None)
+    author: Optional[str] = Field(default="sales_reviewer")
+    thread_ref: Optional[str] = Field(default=None)
+    proposed_by: Optional[str] = Field(default="feedback-reviewer-agent")
+    proposal_batch_id: Optional[str] = Field(default=None)
+    approver: Optional[str] = Field(default=None)
+    decision_notes: Optional[str] = Field(default=None)
+    actor_id: Optional[str] = Field(default=None)
+    actor_role: Optional[str] = Field(default=None)
 
 
 def _wrap_result(result):
@@ -172,8 +231,150 @@ def _wrap_result(result):
     return {"result": result}
 
 
+_ALLOW_ALL_ROLES = {"system", "sales_manager"}
+_SALES_OPERATOR_OPS = {
+    "add_contact",
+    "search_contact",
+    "update_contact",
+    "list_contacts_to_follow_up",
+    "verify_contact_data",
+    "enrich_contact_data",
+    "qualify_contact_for_outreach",
+    "create_personalized_outreach_draft",
+    "approve_first_touch",
+    "send_whatsapp_outreach",
+    "schedule_contact_task",
+    "log_conversation_event",
+    "mark_no_interest",
+    "buffer_incoming_messages",
+    "route_conversation_turn",
+    "transcribe_incoming_audio",
+}
+_ROLE_ALLOWED_OPERATIONS: dict[str, set[str]] = {
+    "sales_agent": _SALES_OPERATOR_OPS,
+    "sales_operator": _SALES_OPERATOR_OPS,
+    "automation_runtime": {
+        "buffer_incoming_messages",
+        "route_conversation_turn",
+        "transcribe_incoming_audio",
+        "log_conversation_event",
+        "send_whatsapp_outreach",
+        "mark_no_interest",
+        "evaluate_dormant_leads",
+        "process_inbound_message",
+    },
+    "feedback_reviewer": {
+        "search_contact",
+        "list_contacts_to_follow_up",
+        "start_feedback_review_session",
+        "record_human_feedback",
+        "generate_strategy_update_proposal",
+    },
+    "ops_worker": {
+        "evaluate_dormant_leads",
+        "sync_calendar_links",
+        "send_daily_improvement_report",
+    },
+}
+_MANAGER_ONLY_OPERATIONS = {"approve_strategy_updates", "reject_strategy_updates"}
+_CRITICAL_OPERATIONS = {
+    "approve_first_touch",
+    "mark_no_interest",
+    "approve_strategy_updates",
+    "reject_strategy_updates",
+}
+
+
+def _resolve_actor(req: CRMRequest) -> tuple[str, str]:
+    role = (req.actor_role or "").strip().lower() or "system"
+    actor = (
+        (req.actor_id or "").strip()
+        or (req.approved_by or "").strip()
+        or (req.approver or "").strip()
+        or (req.author or "").strip()
+        or "system"
+    )
+    return actor, role
+
+
+def _resolve_operation_reason(req: CRMRequest) -> str | None:
+    if req.operation == "approve_strategy_updates":
+        return (req.decision_notes or req.reason or "").strip() or None
+    return (req.reason or "").strip() or None
+
+
+def _authorize_request(req: CRMRequest, *, role: str) -> tuple[bool, str | None]:
+    if role in _ALLOW_ALL_ROLES:
+        return True, None
+    allowed = _ROLE_ALLOWED_OPERATIONS.get(role)
+    if allowed is None:
+        return False, f"role '{role}' desconhecido."
+    if req.operation in _MANAGER_ONLY_OPERATIONS:
+        return False, f"operation '{req.operation}' exige role sales_manager."
+    if req.operation not in allowed:
+        return False, f"role '{role}' sem permissão para '{req.operation}'."
+    if req.operation in _CRITICAL_OPERATIONS and not _resolve_operation_reason(req):
+        return False, f"reason obrigatório para operação crítica '{req.operation}'."
+    return True, None
+
+
+def _json_or_none(payload: Any) -> str | None:
+    if payload is None:
+        return None
+    try:
+        return json.dumps(payload, ensure_ascii=False)
+    except Exception:
+        return None
+
+
+def _record_operation_audit(
+    *,
+    actor: str,
+    role: str,
+    operation: str,
+    resource_id: str | None,
+    status: str,
+    reason: str | None = None,
+    before_payload: Any = None,
+    after_payload: Any = None,
+    error: str | None = None,
+) -> None:
+    try:
+        with get_session() as session:
+            session.add(
+                OperationAuditLog(
+                    actor=actor,
+                    role=role,
+                    operation=operation,
+                    resource_id=resource_id,
+                    status=status,
+                    reason=reason,
+                    before_json=_json_or_none(before_payload),
+                    after_json=_json_or_none(after_payload),
+                    error=error,
+                )
+            )
+            session.flush()
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Falha ao registrar auditoria de operação: %s", exc)
+
+
 @app.post("/execute", dependencies=[Depends(verify_api_key)])
 def execute_crm(req: CRMRequest):
+    actor, role = _resolve_actor(req)
+    is_allowed, denied_reason = _authorize_request(req, role=role)
+    if not is_allowed:
+        _record_operation_audit(
+            actor=actor,
+            role=role,
+            operation=req.operation,
+            resource_id=req.contact_id or req.lead_id or req.proposal_batch_id or req.session_id,
+            status="denied",
+            reason=_resolve_operation_reason(req),
+            error=denied_reason,
+        )
+        return {"result": f"Erro: acesso negado ({denied_reason})"}
+
     if req.operation == "add_contact":
         if not req.nome:
             return {"result": "Erro: nome obrigatório para adicionar contato."}
@@ -302,14 +503,23 @@ def execute_crm(req: CRMRequest):
             return {"result": "Erro: contact_id obrigatório para aprovar primeiro contato."}
         if not req.approved_by:
             return {"result": "Erro: approved_by obrigatório para rastreabilidade."}
-        return _wrap_result(
-            approve_first_touch(
-                contact_id=req.contact_id,
-                approved_by=req.approved_by,
-                draft_interaction_id=req.draft_interaction_id,
-                channel=req.channel or "whatsapp",
-            )
+        result = approve_first_touch(
+            contact_id=req.contact_id,
+            approved_by=req.approved_by,
+            draft_interaction_id=req.draft_interaction_id,
+            channel=req.channel or "whatsapp",
         )
+        _record_operation_audit(
+            actor=actor,
+            role=role,
+            operation=req.operation,
+            resource_id=req.contact_id,
+            status="success" if not (isinstance(result, dict) and "error" in result) else "error",
+            reason=_resolve_operation_reason(req),
+            after_payload=result,
+            error=result.get("error") if isinstance(result, dict) else None,
+        )
+        return _wrap_result(result)
 
     if req.operation == "send_whatsapp_outreach":
         if not req.contact_id:
@@ -369,14 +579,23 @@ def execute_crm(req: CRMRequest):
     if req.operation == "mark_no_interest":
         if not req.contact_id:
             return {"result": "Erro: contact_id obrigatório para marcar desinteresse."}
-        return _wrap_result(
-            mark_no_interest(
-                contact_id=req.contact_id,
-                reason=req.reason,
-                draft_interaction_id=req.draft_interaction_id,
-                metadata=req.metadata,
-            )
+        result = mark_no_interest(
+            contact_id=req.contact_id,
+            reason=req.reason,
+            draft_interaction_id=req.draft_interaction_id,
+            metadata=req.metadata,
         )
+        _record_operation_audit(
+            actor=actor,
+            role=role,
+            operation=req.operation,
+            resource_id=req.contact_id,
+            status="success" if not (isinstance(result, dict) and "error" in result) else "error",
+            reason=_resolve_operation_reason(req),
+            after_payload=result,
+            error=result.get("error") if isinstance(result, dict) else None,
+        )
+        return _wrap_result(result)
 
     if req.operation == "sync_calendar_links":
         return _wrap_result(
@@ -393,6 +612,157 @@ def execute_crm(req: CRMRequest):
                 force=bool(req.force),
                 channel_id=req.report_channel_id,
                 target=req.target,
+            )
+        )
+
+    if req.operation == "buffer_incoming_messages":
+        lead_id = req.lead_id or req.contact_id
+        if not lead_id:
+            return {"result": "Erro: lead_id (ou contact_id) obrigatório para buffer."}
+        if not req.event_text:
+            return {"result": "Erro: event_text obrigatório para buffer."}
+        return _wrap_result(
+            buffer_incoming_messages(
+                lead_id=lead_id,
+                event_text=req.event_text,
+                channel=req.channel or "whatsapp",
+                message_id=req.message_id,
+                max_hold_ms=req.max_hold_ms or 20000,
+                max_msgs=req.max_msgs or 6,
+                max_chars=req.max_chars or 1000,
+            )
+        )
+
+    if req.operation == "route_conversation_turn":
+        payload = req.payload or {}
+        if req.content_summary:
+            payload.setdefault("text", req.content_summary)
+        if req.system_event:
+            payload["system_event"] = req.system_event
+        if req.is_audio:
+            payload["is_audio"] = True
+        return _wrap_result(route_conversation_turn(payload))
+
+    if req.operation == "transcribe_incoming_audio":
+        if not req.message_id or not req.media_ref:
+            return {"result": "Erro: message_id e media_ref obrigatórios para transcrição."}
+        return _wrap_result(
+            transcribe_incoming_audio(
+                message_id=req.message_id,
+                media_ref=req.media_ref,
+                transcript_hint=req.transcript_hint,
+            )
+        )
+
+    if req.operation == "evaluate_dormant_leads":
+        return _wrap_result(
+            evaluate_dormant_leads(
+                ruleset=req.ruleset,
+                limit=req.limit or 50,
+            )
+        )
+
+    if req.operation == "start_feedback_review_session":
+        if not req.batch_id:
+            return {"result": "Erro: batch_id obrigatório para iniciar review."}
+        return _wrap_result(
+            start_feedback_review_session(
+                batch_id=req.batch_id,
+                stage=req.stage,
+                city=req.city,
+                client_type=req.client_type,
+                thread_ref=req.thread_ref,
+                metadata=req.metadata,
+            )
+        )
+
+    if req.operation == "record_human_feedback":
+        if not req.session_id:
+            return {"result": "Erro: session_id obrigatório para registrar feedback."}
+        if not req.feedback_text:
+            return {"result": "Erro: feedback_text obrigatório para registrar feedback."}
+        return _wrap_result(
+            record_human_feedback(
+                session_id=req.session_id,
+                feedback_text=req.feedback_text,
+                tags=req.tags,
+                author=req.author or "sales_reviewer",
+                metadata=req.metadata,
+            )
+        )
+
+    if req.operation == "generate_strategy_update_proposal":
+        if not req.session_id:
+            return {"result": "Erro: session_id obrigatório para gerar proposta."}
+        return _wrap_result(
+            generate_strategy_update_proposal(
+                session_id=req.session_id,
+                proposed_by=req.proposed_by or "feedback-reviewer-agent",
+                top_n=req.limit or 5,
+            )
+        )
+
+    if req.operation == "approve_strategy_updates":
+        if not req.proposal_batch_id:
+            return {"result": "Erro: proposal_batch_id obrigatório para aprovação."}
+        if not req.approver:
+            return {"result": "Erro: approver obrigatório para aprovação."}
+        result = approve_strategy_updates(
+            proposal_batch_id=req.proposal_batch_id,
+            approver=req.approver,
+            decision_notes=req.decision_notes,
+        )
+        _record_operation_audit(
+            actor=actor,
+            role=role,
+            operation=req.operation,
+            resource_id=req.proposal_batch_id,
+            status="success" if not (isinstance(result, dict) and "error" in result) else "error",
+            reason=_resolve_operation_reason(req),
+            after_payload=result,
+            error=result.get("error") if isinstance(result, dict) else None,
+        )
+        return _wrap_result(result)
+
+    if req.operation == "reject_strategy_updates":
+        if not req.proposal_batch_id:
+            return {"result": "Erro: proposal_batch_id obrigatório para rejeição."}
+        if not req.reason:
+            return {"result": "Erro: reason obrigatório para rejeição."}
+        result = reject_strategy_updates(
+            proposal_batch_id=req.proposal_batch_id,
+            reason=req.reason,
+        )
+        _record_operation_audit(
+            actor=actor,
+            role=role,
+            operation=req.operation,
+            resource_id=req.proposal_batch_id,
+            status="success" if not (isinstance(result, dict) and "error" in result) else "error",
+            reason=_resolve_operation_reason(req),
+            after_payload=result,
+            error=result.get("error") if isinstance(result, dict) else None,
+        )
+        return _wrap_result(result)
+
+    if req.operation == "process_inbound_message":
+        if not req.lead_id:
+            return {"result": "Erro: lead_id obrigatório para process_inbound_message."}
+        if not req.event_text and not (req.is_audio and req.media_ref):
+            return {"result": "Erro: event_text obrigatório (ou is_audio+media_ref para áudio)."}
+        if crm_inbound_pipe is None:
+            return {"result": "Erro: pipes.crm_inbound_pipe não disponível neste ambiente."}
+        return _wrap_result(
+            crm_inbound_pipe.run(
+                lead_id=req.lead_id,
+                event_text=req.event_text or "",
+                channel=req.channel or "whatsapp",
+                message_id=req.message_id,
+                media_ref=req.media_ref,
+                is_audio=bool(req.is_audio),
+                max_hold_ms=req.max_hold_ms or 20000,
+                max_msgs=req.max_msgs or 6,
+                max_chars=req.max_chars or 1000,
             )
         )
 
@@ -441,7 +811,7 @@ if Server is not None:
         return [
         Tool(
             name="add_contact",
-            description="Adiciona um novo contato ao CRM (email OU whatsapp OU telefone).",
+            description="Adiciona um novo contato ao CRM. Obrigatório: nome + ao menos um de: email, whatsapp ou telefone.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -464,7 +834,6 @@ if Server is not None:
                     "cnaes": {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["nome"],
-                "anyOf": [{"required": ["email"]}, {"required": ["whatsapp"]}, {"required": ["telefone"]}],
             },
         ),
         Tool(
@@ -694,6 +1063,152 @@ if Server is not None:
                 "required": [],
             },
         ),
+        Tool(
+            name="buffer_incoming_messages",
+            description="Agrupa mensagens inbound de um lead em buffer semântico antes do roteamento.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "lead_id": {"type": "string"},
+                    "event_text": {"type": "string"},
+                    "channel": {"type": "string"},
+                    "message_id": {"type": "string"},
+                    "max_hold_ms": {"type": "integer"},
+                    "max_msgs": {"type": "integer"},
+                    "max_chars": {"type": "integer"},
+                },
+                "required": ["lead_id", "event_text"],
+            },
+        ),
+        Tool(
+            name="route_conversation_turn",
+            description="Classifica intent e seleciona especialista (router).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "payload": {"type": "object"},
+                    "content_summary": {"type": "string"},
+                    "system_event": {"type": "string"},
+                    "is_audio": {"type": "boolean"},
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="transcribe_incoming_audio",
+            description="Transcreve áudio inbound para texto de contexto.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string"},
+                    "media_ref": {"type": "string"},
+                    "transcript_hint": {"type": "string"},
+                },
+                "required": ["message_id", "media_ref"],
+            },
+        ),
+        Tool(
+            name="evaluate_dormant_leads",
+            description="Avalia leads dormentes e injeta eventos timeout_24h/48h/72h.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ruleset": {"type": "object"},
+                    "limit": {"type": "integer"},
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="start_feedback_review_session",
+            description="Inicia sessão de review humano para um batch.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "batch_id": {"type": "string"},
+                    "stage": {"type": "string"},
+                    "city": {"type": "string"},
+                    "client_type": {"type": "string"},
+                    "thread_ref": {"type": "string"},
+                    "metadata": {"type": "object"},
+                },
+                "required": ["batch_id"],
+            },
+        ),
+        Tool(
+            name="record_human_feedback",
+            description="Registra feedback humano em sessão de review.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "feedback_text": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "author": {"type": "string"},
+                    "metadata": {"type": "object"},
+                },
+                "required": ["session_id", "feedback_text"],
+            },
+        ),
+        Tool(
+            name="generate_strategy_update_proposal",
+            description="Gera proposta de ajustes de estratégia para aprovação humana.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "proposed_by": {"type": "string"},
+                    "limit": {"type": "integer", "description": "top_n"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="approve_strategy_updates",
+            description="Aprova proposta e aplica ajustes de estratégia.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposal_batch_id": {"type": "string"},
+                    "approver": {"type": "string"},
+                    "decision_notes": {"type": "string"},
+                },
+                "required": ["proposal_batch_id", "approver"],
+            },
+        ),
+        Tool(
+            name="reject_strategy_updates",
+            description="Rejeita proposta de ajustes de estratégia.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposal_batch_id": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["proposal_batch_id", "reason"],
+            },
+        ),
+        Tool(
+            name="process_inbound_message",
+            description=(
+                "Processa uma mensagem inbound de WhatsApp: buffer → roteamento de intent → "
+                "despacho para specialist → envio da resposta. "
+                "Retorna {status, intent, specialist, messages}."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "lead_id": {"type": "string", "description": "UUID do contato no CRM."},
+                    "event_text": {"type": "string", "description": "Texto da mensagem recebida."},
+                    "channel": {"type": "string", "description": "Canal de comunicação (default: whatsapp)."},
+                    "message_id": {"type": "string"},
+                    "is_audio": {"type": "boolean", "description": "True se a mensagem é áudio."},
+                    "media_ref": {"type": "string", "description": "URL ou ref do arquivo de áudio."},
+                    "max_hold_ms": {"type": "integer"},
+                },
+                "required": ["lead_id"],
+            },
+        ),
     ]
 
 
@@ -871,6 +1386,102 @@ if Server is not None:
                     force=bool(arguments.get("force", False)),
                     channel_id=arguments.get("report_channel_id"),
                     target=arguments.get("target"),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "buffer_incoming_messages":
+                result = buffer_incoming_messages(
+                    lead_id=arguments["lead_id"],
+                    event_text=arguments["event_text"],
+                    channel=arguments.get("channel", "whatsapp"),
+                    message_id=arguments.get("message_id"),
+                    max_hold_ms=arguments.get("max_hold_ms", 20000),
+                    max_msgs=arguments.get("max_msgs", 6),
+                    max_chars=arguments.get("max_chars", 1000),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "route_conversation_turn":
+                payload = arguments.get("payload") or {}
+                if arguments.get("content_summary"):
+                    payload.setdefault("text", arguments.get("content_summary"))
+                if arguments.get("system_event"):
+                    payload["system_event"] = arguments.get("system_event")
+                if arguments.get("is_audio"):
+                    payload["is_audio"] = True
+                result = route_conversation_turn(payload)
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "transcribe_incoming_audio":
+                result = transcribe_incoming_audio(
+                    message_id=arguments["message_id"],
+                    media_ref=arguments["media_ref"],
+                    transcript_hint=arguments.get("transcript_hint"),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "evaluate_dormant_leads":
+                result = evaluate_dormant_leads(
+                    ruleset=arguments.get("ruleset"),
+                    limit=arguments.get("limit", 50),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "start_feedback_review_session":
+                result = start_feedback_review_session(
+                    batch_id=arguments["batch_id"],
+                    stage=arguments.get("stage"),
+                    city=arguments.get("city"),
+                    client_type=arguments.get("client_type"),
+                    thread_ref=arguments.get("thread_ref"),
+                    metadata=arguments.get("metadata"),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "record_human_feedback":
+                result = record_human_feedback(
+                    session_id=arguments["session_id"],
+                    feedback_text=arguments["feedback_text"],
+                    tags=arguments.get("tags"),
+                    author=arguments.get("author", "sales_reviewer"),
+                    metadata=arguments.get("metadata"),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "generate_strategy_update_proposal":
+                result = generate_strategy_update_proposal(
+                    session_id=arguments["session_id"],
+                    proposed_by=arguments.get("proposed_by", "feedback-reviewer-agent"),
+                    top_n=arguments.get("limit", 5),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "approve_strategy_updates":
+                result = approve_strategy_updates(
+                    proposal_batch_id=arguments["proposal_batch_id"],
+                    approver=arguments["approver"],
+                    decision_notes=arguments.get("decision_notes"),
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "reject_strategy_updates":
+                result = reject_strategy_updates(
+                    proposal_batch_id=arguments["proposal_batch_id"],
+                    reason=arguments["reason"],
+                )
+                return [TextContent(type="text", text=_tool_text(result))]
+
+            if name == "process_inbound_message":
+                if crm_inbound_pipe is None:
+                    return [TextContent(type="text", text="Erro: pipes.crm_inbound_pipe não disponível.")]
+                result = crm_inbound_pipe.run(
+                    lead_id=arguments["lead_id"],
+                    event_text=arguments.get("event_text", ""),
+                    channel=arguments.get("channel", "whatsapp"),
+                    message_id=arguments.get("message_id"),
+                    media_ref=arguments.get("media_ref"),
+                    is_audio=bool(arguments.get("is_audio", False)),
+                    max_hold_ms=int(arguments.get("max_hold_ms", 20000)),
                 )
                 return [TextContent(type="text", text=_tool_text(result))]
 

@@ -29,12 +29,19 @@ from llm_usage_telemetry.storage import (
     UsageEvent,
     connect_db,
     connect_pg,
+    ensure_pg_conn,
     get_model_limits,
-    initialize_pg_schema,
+    get_model_limits_pg,
+    initialize_pg_schema_full,
     initialize_schema,
+    mark_report_dispatched_pg,
+    rate_limit_add_tokens_pg,
+    rate_limit_check_and_record_pg,
     record_usage_event,
     record_usage_event_pg,
     upsert_model_limits,
+    upsert_model_limits_pg,
+    was_report_dispatched_pg,
 )
 from llm_usage_telemetry.upstreams import parse_target_model, resolve_upstream
 
@@ -256,6 +263,9 @@ def _build_payload_capture(mode: str, value: Any) -> str | None:
     return serialized
 
 
+_VERSIONED_BASE_RE = re.compile(r"/v\d+$")
+
+
 def _join_upstream_url(base_url: str, request_path: str) -> str:
     normalized_base = base_url.rstrip("/")
     if request_path.startswith("/v1/") and normalized_base.endswith("/v1"):
@@ -266,6 +276,10 @@ def _join_upstream_url(base_url: str, request_path: str) -> str:
         return normalized_base + request_path[len("/v1") :]
     if request_path.startswith("/api/") and normalized_base.endswith("/v1"):
         return normalized_base[: -len("/v1")] + request_path
+    # Providers whose base URL ends with /v{N} (e.g. /v4 for z.ai) use their own
+    # version segment in place of the standard /v1 prefix.
+    if request_path.startswith("/v1/") and _VERSIONED_BASE_RE.search(normalized_base):
+        return normalized_base + request_path[len("/v1") :]
     return normalized_base + request_path
 
 
@@ -686,13 +700,14 @@ def _bucket_start_day(now: datetime, tz_name: str) -> datetime:
 def _rate_limit_check_and_record(
     conn: Any,
     *,
+    pg_conn: Any = None,
     provider: str,
     model: str,
     tz_name: str,
     limits: Any,
     tokens: int,
 ) -> tuple[bool, str | None]:
-    if not conn or not limits:
+    if (not conn and pg_conn is None) or not limits:
         return True, None
 
     rpm = getattr(limits, "rpm", None)
@@ -708,10 +723,17 @@ def _rate_limit_check_and_record(
     token_inc = max(int(tokens or 0), 0)
 
     # Hard reject: single request larger than the model's entire minute TPM budget.
-    # No amount of waiting helps — skip immediately so the gateway falls back to
-    # a higher-TPM model (e.g. Cerebras) without wasting an upstream call.
     if tpm is not None and token_inc > int(tpm):
         return False, f"request_exceeds_tpm: request={token_inc} tpm_limit={tpm}"
+
+    # Use PostgreSQL (row-level locking) when available — avoids SQLite file lock
+    if pg_conn is not None:
+        return rate_limit_check_and_record_pg(
+            pg_conn,
+            provider=provider, model=model,
+            bucket_minute=minute_start, bucket_day=day_start,
+            token_inc=token_inc, rpm=rpm, tpm=tpm, rpd=rpd, tpd=tpd,
+        )
 
     def current(kind: str, start: str) -> tuple[int, int]:
         row = conn.execute(
@@ -778,13 +800,14 @@ def _rate_limit_check_and_record(
 def _rate_limit_add_tokens(
     conn: Any,
     *,
+    pg_conn: Any = None,
     provider: str,
     model: str,
     tz_name: str,
     limits: Any,
     tokens: int,
 ) -> None:
-    if not conn or not limits:
+    if (not conn and pg_conn is None) or not limits:
         return
 
     tpm = getattr(limits, "tpm", None)
@@ -799,6 +822,13 @@ def _rate_limit_add_tokens(
     now = datetime.now(timezone.utc)
     minute_start = _bucket_start_minute(now).isoformat()
     day_start = _bucket_start_day(now, tz_name).isoformat()
+
+    if pg_conn is not None:
+        rate_limit_add_tokens_pg(
+            pg_conn, provider=provider, model=model,
+            bucket_minute=minute_start, bucket_day=day_start, tokens=token_inc,
+        )
+        return
 
     def bump(kind: str, start: str, tok_inc: int) -> None:
         conn.execute(
@@ -892,8 +922,8 @@ class MetricsProxyService:
         if self._pg_url:
             self.pg_conn = connect_pg(self._pg_url)
             if self.pg_conn is not None:
-                initialize_pg_schema(self.pg_conn)
-                print("[llm-metrics-proxy] usage_events → PostgreSQL")
+                initialize_pg_schema_full(self.pg_conn)
+                print("[llm-metrics-proxy] ALL tables → PostgreSQL (rate_buckets, model_limits, dispatches, usage_events)")
         self.last_openclaw_sync: dict[str, Any] | None = None
         if getattr(settings, "sync_openclaw_models", False):
             try:
@@ -1015,12 +1045,27 @@ class MetricsProxyService:
                 raise ValueError("missing target provider/model")
             target = parse_target_model(f"usage-router/{provider}/{model}")
 
+        # Reconecta PG se a conexão estiver fechada (evita 500 por pool esgotado)
+        if self._pg_url:
+            self.pg_conn = ensure_pg_conn(self.pg_conn, self._pg_url)
+
         upstream = resolve_upstream(target)
-        model_limits = get_model_limits(self.conn, target.provider, target.model)
+        model_limits = (get_model_limits_pg(self.pg_conn, target.provider, target.model)
+                        if self.pg_conn else
+                        get_model_limits(self.conn, target.provider, target.model))
         if model_limits is None:
+            from llm_usage_telemetry.storage import ModelLimits as _ML
             default_rpm = _DEFAULT_RPM_BY_PROVIDER.get(target.provider, _DEFAULT_RPM_FALLBACK)
             upsert_model_limits(self.conn, target.provider, target.model, rpm=default_rpm)
-            model_limits = get_model_limits(self.conn, target.provider, target.model)
+            if self.pg_conn:
+                upsert_model_limits_pg(self.pg_conn, _ML(
+                    provider=target.provider, model=target.model, enabled=True,
+                    disabled_reason=None, context_window=None, max_output_tokens=None,
+                    rpm=default_rpm, rpd=None, tpm=None, tpd=None,
+                ))
+            model_limits = (get_model_limits_pg(self.pg_conn, target.provider, target.model)
+                            if self.pg_conn else
+                            get_model_limits(self.conn, target.provider, target.model))
         if model_limits and not model_limits.enabled:
             return ProxyResult(
                 status_code=400,
@@ -1086,6 +1131,7 @@ class MetricsProxyService:
             reserved_tokens = int(max(0, estimated_input))
             allowed, reason = _rate_limit_check_and_record(
                 self.conn,
+                pg_conn=self.pg_conn,
                 provider=target.provider,
                 model=target.model,
                 tz_name=self.settings.report_timezone,
@@ -1217,6 +1263,7 @@ class MetricsProxyService:
                                 if output_estimated > 0:
                                     _rate_limit_add_tokens(
                                         self.conn,
+                                        pg_conn=self.pg_conn,
                                         provider=target.provider,
                                         model=target.model,
                                         tz_name=self.settings.report_timezone,
@@ -1377,6 +1424,7 @@ class MetricsProxyService:
                             if output_estimated > 0:
                                 _rate_limit_add_tokens(
                                     self.conn,
+                                        pg_conn=self.pg_conn,
                                     provider=target.provider,
                                     model=target.model,
                                     tz_name=self.settings.report_timezone,
@@ -1493,6 +1541,7 @@ class MetricsProxyService:
                 if extra_output_tokens > 0:
                     _rate_limit_add_tokens(
                         self.conn,
+                                        pg_conn=self.pg_conn,
                         provider=target.provider,
                         model=target.model,
                         tz_name=self.settings.report_timezone,

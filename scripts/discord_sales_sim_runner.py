@@ -78,6 +78,7 @@ def main() -> int:
             publisher=transport,
             invoker=invoker,
             storage=storage,
+            discord_transport=transport,
         )
     except SimulationParseError as exc:
         examples = command_examples()

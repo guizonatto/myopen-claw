@@ -382,9 +382,32 @@ def select_message_strategy(
     )
 
     if archetype_hint:
-        hinted = [c for c in candidates if c.get("message_archetype") == _slug(archetype_hint, "")]
+        hint_slug = _slug(archetype_hint, "")
+        hinted = [c for c in candidates if c.get("message_archetype") == hint_slug]
         if hinted:
             candidates = hinted
+            retrieval_level = f"{retrieval_level}_hint"
+        elif hint_slug:
+            archetype_candidates = [
+                strategy
+                for strategy in strategies
+                if strategy.get("stage") == dimensions["stage"]
+                and strategy.get("message_archetype") == hint_slug
+                and strategy.get("client_type") in {dimensions["client_type"], WILDCARD}
+                and strategy.get("city") in {dimensions["city"], WILDCARD}
+                and strategy.get("channel") in {dimensions["channel"], WILDCARD}
+            ]
+            if archetype_candidates:
+                def _specificity_score(item: dict[str, Any]) -> tuple[int, int, int]:
+                    return (
+                        1 if item.get("client_type") == dimensions["client_type"] else 0,
+                        1 if item.get("city") == dimensions["city"] else 0,
+                        1 if item.get("channel") == dimensions["channel"] else 0,
+                    )
+
+                archetype_candidates.sort(key=_specificity_score, reverse=True)
+                candidates = archetype_candidates
+                retrieval_level = "archetype_override"
 
     if not candidates:
         fallback_archetype = _slug(archetype_hint, "stage_global_default")

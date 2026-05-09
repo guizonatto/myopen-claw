@@ -1,10 +1,41 @@
 {
-  "version": "2026-04-16",
+  "version": "2026-05-06",
   "policy": {
     "lanes": [
       {
+        "id": "cerebras_free",
+        "label": "Cerebras (free — prioridade 1)",
+        "models": [
+          "cerebras/qwen-3-235b-a22b-instruct-2507"
+        ]
+      },
+      {
+        "id": "google_paid",
+        "label": "Google Gemini (prioridade 2)",
+        "models": [
+          "google/gemini-2.5-flash",
+          "google/gemini-2.5-flash-lite",
+          "google/gemini-2.5-pro"
+        ]
+      },
+      {
+        "id": "zai_paid",
+        "label": "ZAI (paid — prioridade 3)",
+        "models": [
+          "zai/glm-4.7-flash"
+        ]
+      },
+      {
+        "id": "openai_paid",
+        "label": "OpenAI (paid — fallback)",
+        "models": [
+          "openai/gpt-5-nano",
+          "openai/gpt-4.1"
+        ]
+      },
+      {
         "id": "groq_free",
-        "label": "Groq (free)",
+        "label": "Groq (free — último fallback)",
         "models": [
           "groq/llama-3.1-8b-instant",
           "groq/openai/gpt-oss-20b",
@@ -12,29 +43,6 @@
           "groq/openai/gpt-oss-120b",
           "groq/llama-3.3-70b-versatile",
           "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-        ]
-      },
-      {
-        "id": "mistral_free",
-        "label": "Mistral (free)",
-        "models": [
-          "mistral/mistral-large-latest",
-          "mistral/mistral-medium-2508",
-          "mistral/mistral-small-latest",
-          "mistral/pixtral-large-latest",
-          "mistral/codestral-latest",
-          "mistral/devstral-medium-latest",
-          "mistral/magistral-small-latest"
-        ]
-      },
-      {
-        "id": "cerebras_free",
-        "label": "Cerebras (free)",
-        "models": [
-          "cerebras/llama3.1-8b",
-          "cerebras/qwen-3-235b-a22b-instruct-2507",
-          "cerebras/qwen-3-235b-2507",
-          "cerebras/gpt-oss-120b"
         ]
       },
       {
@@ -49,29 +57,16 @@
         "id": "deepseek_paid",
         "label": "DeepSeek (paid)",
         "models": [
+          "deepseek/deepseek-v4-pro",
           "deepseek/deepseek-chat",
           "deepseek/deepseek-reasoner"
         ]
       },
       {
-        "id": "google_paid",
-        "label": "Google Gemini (AI Studio)",
+        "id": "openrouter_paid_escape",
+        "label": "OpenRouter (paid escape)",
         "models": [
-          "google/gemini-2.5-flash",
-          "google/gemini-2.5-flash-lite",
-          "google/gemini-2.5-pro",
-          "google/gemini-3-flash-preview",
-          "google/gemini-3-pro-preview",
-          "google/gemini-3.1-pro-preview",
-          "google/gemini-3.1-pro-preview-customtools",
-          "google/gemini-3.1-flash-lite-preview",
-          "google/gemini-pro-latest",
-          "google/gemini-flash-latest",
-          "google/gemini-flash-lite-latest",
-          "google/gemini-2.0-flash",
-          "google/gemini-2.0-flash-001",
-          "google/gemini-2.0-flash-lite",
-          "google/gemini-2.0-flash-lite-001"
+          "openrouter/openai/gpt-5-mini"
         ]
       },
       {
@@ -121,15 +116,11 @@
         "label": "Ollama (local: memclaw/cortex-mem)",
         "includeInChain": false,
         "models": [
+          "ollama/qwen3.5:4b",
           "ollama/gemma4:e2b",
-          "ollama/qwen3-embedding:0.6b"
-        ]
-      },
-      {
-        "id": "openrouter_paid_escape",
-        "label": "OpenRouter (paid escape)",
-        "models": [
-          "openrouter/openai/gpt-5-mini"
+          "ollama/gemma4:latest",
+          "ollama/qwen3-embedding:0.6b",
+          "ollama/qwen3-embedding:4b"
         ]
       }
     ]
@@ -143,16 +134,14 @@
     "reddit_digest": "usage-router/cerebras/llama3.1-8b",
     "reddit-digest": "usage-router/cerebras/gpt-oss-120b",
     "trends": "usage-router/cerebras/llama3.1-8b",
-
-    "crm": "usage-router/cerebras/gpt-oss-120b",
-    "shopping-tracker": "usage-router/cerebras/gpt-oss-120b",
+    "crm": "usage-router/zai/glm-4.6",
+    "discord-sales-sim": "usage-router/zai/glm-4.6",
+    "shopping-tracker": "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
     "vault": "usage-router/cerebras/llama3.1-8b",
     "x-trending": "usage-router/cerebras/gpt-oss-120b",
     "fetch-trending-topics": "usage-router/cerebras/gpt-oss-120b",
-
-    "sindico-leads": "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
+    "sindico-leads": "usage-router/deepseek/deepseek-v4-pro",
     "github-weekly-summary": "usage-router/mistral/devstral-medium-latest",
-
     "daily-content-creator": "usage-router/mistral/mistral-small-latest",
     "humanizer": "usage-router/mistral/mistral-small-latest",
     "weekly-michelin-meal-plan": "usage-router/mistral/mistral-small-latest",

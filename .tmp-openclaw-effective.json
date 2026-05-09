@@ -1,0 +1,743 @@
+{
+  "$schema": "https://docs.openclaw.ai/schema.json",
+  "mcp": {
+    "servers": {
+      "mcp-crm": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-crm",
+          "python3",
+          "/app/main.py"
+        ],
+        "type": "stdio"
+      },
+      "mcp-shopping": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-shopping-tracker",
+          "python3",
+          "/app/main.py"
+        ],
+        "type": "stdio"
+      },
+      "mcp-leads": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-leads",
+          "python3",
+          "/app/main.py"
+        ],
+        "type": "stdio"
+      },
+      "mcp-trends": {
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-trends",
+          "python3",
+          "/app/main.py"
+        ],
+        "type": "stdio"
+      },
+      "obsidian": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "obsidian-mcp@1.0.6",
+          "/vault"
+        ],
+        "type": "stdio"
+      },
+      "crm": {
+        "type": "stdio",
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-crm",
+          "python3",
+          "/app/main.py"
+        ]
+      },
+      "shopping": {
+        "type": "stdio",
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-shopping-tracker",
+          "python3",
+          "/app/main.py"
+        ]
+      },
+      "trends": {
+        "type": "stdio",
+        "command": "docker",
+        "args": [
+          "exec",
+          "-i",
+          "mcp-trends",
+          "python3",
+          "/app/main.py"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "slots": {
+      "memory": "memclaw"
+    },
+    "entries": {
+      "memclaw": {
+        "enabled": true,
+        "config": {
+          "serviceUrl": "http://cortex-mem:8085",
+          "tenantId": "tenant_claw",
+          "autoStartServices": false,
+          "llmApiBaseUrl": "http://llm-metrics-proxy:8080/memclaw/v1",
+          "llmApiKey": "usage-router-local",
+          "llmModel": "usage-router/ollama/gemma4:e2b",
+          "embeddingApiBaseUrl": "http://llm-metrics-proxy:8080/memclaw/v1",
+          "embeddingApiKey": "usage-router-local",
+          "embeddingModel": "usage-router/ollama/qwen3-embedding:0.6b"
+        }
+      },
+      "anthropic": {
+        "enabled": true
+      },
+      "browser": {
+        "enabled": true
+      }
+    },
+    "installs": {},
+    "allow": [
+      "memclaw",
+      "evolution",
+      "usage-router",
+      "anthropic",
+      "browser"
+    ]
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789",
+        "http://localhost:8090"
+      ]
+    },
+    "auth": {
+      "token": "senhaSecretaDoGuizo123",
+      "mode": "password",
+      "password": "senha_super_secreta"
+    },
+    "port": 18789,
+    "bind": "lan",
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "browser": {
+    "enabled": true
+  },
+  "tools": {
+    "web": {
+      "fetch": {
+        "enabled": true
+      },
+      "search": {
+        "provider": "tavily"
+      }
+    },
+    "profile": "coding"
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "allowFrom": [
+        "*"
+      ],
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      }
+    },
+    "discord": {
+      "enabled": true,
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "DISCORD_BOT_TOKEN"
+      },
+      "allowFrom": [
+        "*"
+      ],
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "guilds": {
+        "1489287060379664434": {
+          "requireMention": false,
+          "channels": {
+            "1491012470104653846": {
+              "requireMention": false
+            }
+          }
+        }
+      }
+    },
+    "telegram": {
+      "enabled": true,
+      "botToken": "8666496123:AAF_HsEPLYmddWrfd4Ln4D-IuZfP6StFbs0",
+      "allowFrom": [
+        "8570406236"
+      ],
+      "dmPolicy": "allowlist"
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "skills": {
+    "entries": {
+      "tech-news-digest": {
+        "env": {
+          "WEB_SEARCH_BACKEND": "tavily"
+        }
+      }
+    },
+    "install": {
+      "nodeManager": "npm"
+    }
+  },
+  "models": {
+    "providers": {
+      "ollama": {
+        "apiKey": "ollama",
+        "baseUrl": "http://host.docker.internal:11434",
+        "api": "ollama",
+        "models": []
+      },
+      "usage-router": {
+        "baseUrl": "http://llm-metrics-proxy:8080/openclaw/v1",
+        "apiKey": "usage-router-local",
+        "api": "openai-completions",
+        "models": []
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": false
+      },
+      "model": {
+        "primary": "usage-router/groq/llama-3.1-8b-instant",
+        "fallbacks": [
+          "usage-router/groq/openai/gpt-oss-20b",
+          "usage-router/groq/qwen/qwen3-32b",
+          "usage-router/groq/openai/gpt-oss-120b",
+          "usage-router/groq/llama-3.3-70b-versatile",
+          "usage-router/groq/meta-llama/llama-4-scout-17b-16e-instruct",
+          "usage-router/mistral/mistral-large-latest",
+          "usage-router/mistral/mistral-medium-2508",
+          "usage-router/mistral/mistral-small-latest",
+          "usage-router/mistral/pixtral-large-latest",
+          "usage-router/mistral/codestral-latest",
+          "usage-router/mistral/devstral-medium-latest",
+          "usage-router/mistral/magistral-small-latest",
+          "usage-router/cerebras/llama3.1-8b",
+          "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507",
+          "usage-router/cerebras/qwen-3-235b-2507",
+          "usage-router/cerebras/gpt-oss-120b",
+          "usage-router/qwen/qwen3.5-flash",
+          "usage-router/qwen/qwen3.5-plus",
+          "usage-router/deepseek/deepseek-chat",
+          "usage-router/deepseek/deepseek-reasoner",
+          "usage-router/google/gemini-2.5-flash",
+          "usage-router/google/gemini-2.5-flash-lite",
+          "usage-router/google/gemini-2.5-pro",
+          "usage-router/google/gemini-3-flash-preview",
+          "usage-router/google/gemini-3-pro-preview",
+          "usage-router/google/gemini-3.1-pro-preview",
+          "usage-router/google/gemini-3.1-pro-preview-customtools",
+          "usage-router/google/gemini-3.1-flash-lite-preview",
+          "usage-router/google/gemini-pro-latest",
+          "usage-router/google/gemini-flash-latest",
+          "usage-router/google/gemini-flash-lite-latest",
+          "usage-router/google/gemini-2.0-flash",
+          "usage-router/google/gemini-2.0-flash-001",
+          "usage-router/google/gemini-2.0-flash-lite",
+          "usage-router/google/gemini-2.0-flash-lite-001",
+          "usage-router/openrouter/openai/gpt-5-mini"
+        ]
+      },
+      "models": {
+        "usage-router/groq/llama-3.1-8b-instant": {
+          "alias": "llama-3.1-8b-instant"
+        },
+        "usage-router/groq/openai/gpt-oss-20b": {
+          "alias": "gpt-oss-20b"
+        },
+        "usage-router/groq/qwen/qwen3-32b": {
+          "alias": "qwen3-32b"
+        },
+        "usage-router/groq/openai/gpt-oss-120b": {
+          "alias": "gpt-oss-120b"
+        },
+        "usage-router/groq/llama-3.3-70b-versatile": {
+          "alias": "llama-3.3-70b-versatile"
+        },
+        "usage-router/groq/meta-llama/llama-4-scout-17b-16e-instruct": {
+          "alias": "llama-4-scout-17b-16e-instruct"
+        },
+        "usage-router/mistral/mistral-large-latest": {
+          "alias": "mistral-large-latest"
+        },
+        "usage-router/mistral/mistral-medium-2508": {
+          "alias": "mistral-medium-2508"
+        },
+        "usage-router/mistral/mistral-small-latest": {
+          "alias": "mistral-small-latest"
+        },
+        "usage-router/mistral/pixtral-large-latest": {
+          "alias": "pixtral-large-latest"
+        },
+        "usage-router/mistral/codestral-latest": {
+          "alias": "codestral-latest"
+        },
+        "usage-router/mistral/devstral-medium-latest": {
+          "alias": "devstral-medium-latest"
+        },
+        "usage-router/mistral/magistral-small-latest": {
+          "alias": "magistral-small-latest"
+        },
+        "usage-router/cerebras/llama3.1-8b": {
+          "alias": "llama3.1-8b"
+        },
+        "usage-router/cerebras/qwen-3-235b-a22b-instruct-2507": {
+          "alias": "qwen-3-235b-a22b-instruct-2507"
+        },
+        "usage-router/cerebras/qwen-3-235b-2507": {
+          "alias": "qwen-3-235b-2507"
+        },
+        "usage-router/cerebras/gpt-oss-120b": {
+          "alias": "gpt-oss-120b"
+        },
+        "usage-router/qwen/qwen3.5-flash": {
+          "alias": "qwen3.5-flash"
+        },
+        "usage-router/qwen/qwen3.5-plus": {
+          "alias": "qwen3.5-plus"
+        },
+        "usage-router/deepseek/deepseek-chat": {
+          "alias": "deepseek-chat"
+        },
+        "usage-router/deepseek/deepseek-reasoner": {
+          "alias": "deepseek-reasoner"
+        },
+        "usage-router/google/gemini-2.5-flash": {
+          "alias": "gemini-2.5-flash"
+        },
+        "usage-router/google/gemini-2.5-flash-lite": {
+          "alias": "gemini-2.5-flash-lite"
+        },
+        "usage-router/google/gemini-2.5-pro": {
+          "alias": "gemini-2.5-pro"
+        },
+        "usage-router/google/gemini-3-flash-preview": {
+          "alias": "gemini-3-flash-preview"
+        },
+        "usage-router/google/gemini-3-pro-preview": {
+          "alias": "gemini-3-pro-preview"
+        },
+        "usage-router/google/gemini-3.1-pro-preview": {
+          "alias": "gemini-3.1-pro-preview"
+        },
+        "usage-router/google/gemini-3.1-pro-preview-customtools": {
+          "alias": "gemini-3.1-pro-preview-customtools"
+        },
+        "usage-router/google/gemini-3.1-flash-lite-preview": {
+          "alias": "gemini-3.1-flash-lite-preview"
+        },
+        "usage-router/google/gemini-pro-latest": {
+          "alias": "gemini-pro-latest"
+        },
+        "usage-router/google/gemini-flash-latest": {
+          "alias": "gemini-flash-latest"
+        },
+        "usage-router/google/gemini-flash-lite-latest": {
+          "alias": "gemini-flash-lite-latest"
+        },
+        "usage-router/google/gemini-2.0-flash": {
+          "alias": "gemini-2.0-flash"
+        },
+        "usage-router/google/gemini-2.0-flash-001": {
+          "alias": "gemini-2.0-flash-001"
+        },
+        "usage-router/google/gemini-2.0-flash-lite": {
+          "alias": "gemini-2.0-flash-lite"
+        },
+        "usage-router/google/gemini-2.0-flash-lite-001": {
+          "alias": "gemini-2.0-flash-lite-001"
+        },
+        "usage-router/google/gemini-embedding-001": {
+          "alias": "gemini-embedding-001"
+        },
+        "usage-router/google/gemini-embedding-2-preview": {
+          "alias": "gemini-embedding-2-preview"
+        },
+        "usage-router/google/gemini-2.5-flash-image": {
+          "alias": "gemini-2.5-flash-image"
+        },
+        "usage-router/google/gemini-3-pro-image-preview": {
+          "alias": "gemini-3-pro-image-preview"
+        },
+        "usage-router/google/gemini-3.1-flash-image-preview": {
+          "alias": "gemini-3.1-flash-image-preview"
+        },
+        "usage-router/google/nano-banana-pro-preview": {
+          "alias": "nano-banana-pro-preview"
+        },
+        "usage-router/google/gemini-2.5-flash-preview-tts": {
+          "alias": "gemini-2.5-flash-preview-tts"
+        },
+        "usage-router/google/gemini-2.5-pro-preview-tts": {
+          "alias": "gemini-2.5-pro-preview-tts"
+        },
+        "usage-router/google/gemini-3.1-flash-tts-preview": {
+          "alias": "gemini-3.1-flash-tts-preview"
+        },
+        "usage-router/google/gemini-2.5-flash-native-audio-latest": {
+          "alias": "gemini-2.5-flash-native-audio-latest"
+        },
+        "usage-router/google/gemini-2.5-flash-native-audio-preview-09-2025": {
+          "alias": "gemini-2.5-flash-native-audio-preview-09-2025"
+        },
+        "usage-router/google/lyria-3-clip-preview": {
+          "alias": "lyria-3-clip-preview"
+        },
+        "usage-router/google/lyria-3-pro-preview": {
+          "alias": "lyria-3-pro-preview"
+        },
+        "usage-router/google/veo-2.0-generate-001": {
+          "alias": "veo-2.0-generate-001"
+        },
+        "usage-router/google/veo-3.0-generate-001": {
+          "alias": "veo-3.0-generate-001"
+        },
+        "usage-router/google/veo-3.0-fast-generate-001": {
+          "alias": "veo-3.0-fast-generate-001"
+        },
+        "usage-router/google/veo-3.1-generate-preview": {
+          "alias": "veo-3.1-generate-preview"
+        },
+        "usage-router/google/veo-3.1-fast-generate-preview": {
+          "alias": "veo-3.1-fast-generate-preview"
+        },
+        "usage-router/google/veo-3.1-lite-generate-preview": {
+          "alias": "veo-3.1-lite-generate-preview"
+        },
+        "usage-router/google/imagen-4.0-generate-001": {
+          "alias": "imagen-4.0-generate-001"
+        },
+        "usage-router/google/imagen-4.0-fast-generate-001": {
+          "alias": "imagen-4.0-fast-generate-001"
+        },
+        "usage-router/google/imagen-4.0-ultra-generate-001": {
+          "alias": "imagen-4.0-ultra-generate-001"
+        },
+        "usage-router/google/gemini-2.5-computer-use-preview-10-2025": {
+          "alias": "gemini-2.5-computer-use-preview-10-2025"
+        },
+        "usage-router/google/gemini-robotics-er-1.5-preview": {
+          "alias": "gemini-robotics-er-1.5-preview"
+        },
+        "usage-router/google/gemini-robotics-er-1.6-preview": {
+          "alias": "gemini-robotics-er-1.6-preview"
+        },
+        "usage-router/google/deep-research-pro-preview-12-2025": {
+          "alias": "deep-research-pro-preview-12-2025"
+        },
+        "usage-router/google/aqa": {
+          "alias": "aqa"
+        },
+        "usage-router/google/gemma-3-1b-it": {
+          "alias": "gemma-3-1b-it"
+        },
+        "usage-router/google/gemma-3-4b-it": {
+          "alias": "gemma-3-4b-it"
+        },
+        "usage-router/google/gemma-3-12b-it": {
+          "alias": "gemma-3-12b-it"
+        },
+        "usage-router/google/gemma-3-27b-it": {
+          "alias": "gemma-3-27b-it"
+        },
+        "usage-router/google/gemma-3n-e2b-it": {
+          "alias": "gemma-3n-e2b-it"
+        },
+        "usage-router/google/gemma-3n-e4b-it": {
+          "alias": "gemma-3n-e4b-it"
+        },
+        "usage-router/google/gemma-4-26b-a4b-it": {
+          "alias": "gemma-4-26b-a4b-it"
+        },
+        "usage-router/google/gemma-4-31b-it": {
+          "alias": "gemma-4-31b-it"
+        },
+        "usage-router/ollama/gemma4:e2b": {
+          "alias": "gemma4:e2b"
+        },
+        "usage-router/ollama/qwen3-embedding:0.6b": {
+          "alias": "qwen3-embedding:0.6b"
+        },
+        "usage-router/openrouter/openai/gpt-5-mini": {
+          "alias": "gpt-5-mini"
+        }
+      },
+      "workspace": "/root/.openclaw/workspace"
+    },
+    "list": [
+      {
+        "id": "default",
+        "default": true,
+        "workspace": "~/.openclaw/workspace",
+        "subagents": {
+          "allowAgents": [
+            "librarian"
+          ]
+        }
+      },
+      {
+        "id": "leads",
+        "name": "Prospector",
+        "workspace": "~/.openclaw/workspace-leads",
+        "tools": {
+          "allow": [
+            "exec",
+            "read",
+            "cron",
+            "sessions_list"
+          ],
+          "deny": [
+            "browser",
+            "canvas",
+            "write",
+            "edit"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "content",
+        "name": "Copywriter",
+        "workspace": "~/.openclaw/workspace-content",
+        "tools": {
+          "allow": [
+            "exec",
+            "read",
+            "web_search",
+            "web_fetch",
+            "browser",
+            "cron"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "intel",
+        "name": "Sentinel",
+        "workspace": "~/.openclaw/workspace-intel",
+        "tools": {
+          "allow": [
+            "exec",
+            "read",
+            "web_search",
+            "web_fetch",
+            "cron"
+          ],
+          "deny": [
+            "browser",
+            "canvas"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "ops",
+        "name": "Steward",
+        "workspace": "~/.openclaw/workspace-ops",
+        "tools": {
+          "allow": [
+            "exec",
+            "read",
+            "cron"
+          ],
+          "deny": [
+            "browser",
+            "canvas",
+            "write",
+            "edit"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "usell",
+        "name": "Usell Sales",
+        "workspace": "~/.openclaw/workspace",
+        "tools": {
+          "profile": "messaging"
+        },
+        "default": false
+      },
+      {
+        "id": "sim-control",
+        "name": "Sales Simulation Control",
+        "workspace": "~/.openclaw/workspace-sim-control",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": [
+            "exec",
+            "read"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "cron",
+            "browser",
+            "canvas",
+            "write",
+            "edit"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "sales-sim",
+        "name": "Sales Simulator",
+        "workspace": "~/.openclaw/workspace-sales-sim",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": [
+            "read"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "exec",
+            "cron",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "write",
+            "edit",
+            "mcp-crm"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "sindico-sim",
+        "name": "Sindico Simulator",
+        "workspace": "~/.openclaw/workspace-sindico-sim",
+        "memorySearch": {
+          "enabled": false
+        },
+        "tools": {
+          "allow": [
+            "read"
+          ],
+          "deny": [
+            "sessions_send",
+            "sessions_spawn",
+            "sessions_history",
+            "exec",
+            "cron",
+            "browser",
+            "canvas",
+            "web_search",
+            "web_fetch",
+            "write",
+            "edit",
+            "mcp-crm"
+          ]
+        },
+        "default": false
+      },
+      {
+        "id": "librarian",
+        "name": "Librarian",
+        "workspace": "/vault",
+        "default": false
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "agentId": "default",
+      "match": {
+        "channel": "whatsapp",
+        "peer": {
+          "kind": "direct",
+          "id": "5541999159953"
+        }
+      }
+    },
+    {
+      "agentId": "usell",
+      "match": {
+        "channel": "whatsapp"
+      }
+    }
+  ],
+  "logging": {
+    "level": "debug"
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "github-push": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "api_key"
+      }
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-04-24T01:24:57.985Z",
+    "lastRunVersion": "2026.4.9",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.4.9",
+    "lastTouchedAt": "2026-04-24T01:32:16.519Z"
+  }
+}

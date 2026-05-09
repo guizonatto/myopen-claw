@@ -40,7 +40,25 @@ Referência oficial do Gateway: https://docs.openclaw.ai/
 - Use `/new` para scaffoldar qualquer componente novo no lugar correto.
 - Nunca duplique regras aqui — edite o doc canônico correspondente.
 - Sempre que instalar dependências, plugins ou comandos que precisem rodar no deploy, adicione a entrada correspondente no `entrypoint.sh` para garantir automação total.
-- Para versionamento e documentação de cronjobs, siga `.claude/rules/rule-openclaw-cronjob-versioning.md`.
+- Para versionamento e documentação de cronjobs, siga `.agents/rules/rule-openclaw-cronjob-versioning.md`.
+
+## Regras do projeto
+
+Todas as regras estão em `.agents/rules/`. Consulte antes de implementar qualquer componente relacionado a agentes, MCPs, skills ou crons.
+
+Regras relevantes por tópico:
+
+| Tópico | Arquivo |
+|---|---|
+| Agente default (Personal-Assistant) — tools, allow, deny | `.agents/rules/rule-openclaw-default-agent-tools.md` |
+| Reduzir tokens/schemas de MCP | `.agents/rules/rule-mcp-context-reduction.md` → doc em `docs/mcp-context-reduction.md` |
+| Schemas de tools MCP (inputSchema) | `.agents/rules/rule-mcp-tool-schema.md` |
+| Criar/deployar um MCP | `.agents/rules/rule-deploy-mcp.md` |
+| Agentes OpenClaw (estrutura, identidade) | `.agents/rules/rule-openclaw-agents.md` |
+| Cronjobs (criação e versionamento) | `.agents/rules/rule-openclaw-cronjob-versioning.md` |
+| Novo skill | `.agents/rules/rule-openclaw-new-skill.md` |
+| Hooks OpenClaw | `.agents/rules/rule-openclaw-hooks.md` |
+| Workspaces por domínio — onde cada skill vai, como criar agente novo | `.agents/rules/rule-openclaw-workspace-domains.md` |
 
 ## graphify
 

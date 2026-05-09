@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -14,17 +15,24 @@ try:
     from .improvement_report import send_daily_improvement_report as send_daily_improvement_report_impl
     from .message_strategy import (
         apply_inference_to_contact,
+        build_daily_improvement_snapshot,
         record_strategy_outcome,
         resolve_contact_dimensions,
         resolve_sla_outcome,
         select_message_strategy,
+        update_strategy_ranking,
     )
     from .models import (
         CalendarLink,
         ContactEnrichmentRun,
+        FeedbackReviewEntry,
+        FeedbackReviewSession,
         ContactInteraction,
+        IncomingMessageBuffer,
         ContactTask,
         Contato,
+        StrategyUpdateProposal,
+        MessageStrategyRanking,
     )
     from .readiness import READINESS_STATES, ReadinessInput, calculate_readiness, can_transition
     from .whatsapp_sender import human_read_delay_ms, send_whatsapp_messages
@@ -35,19 +43,68 @@ except ImportError:  # pragma: no cover
     from improvement_report import send_daily_improvement_report as send_daily_improvement_report_impl
     from message_strategy import (
         apply_inference_to_contact,
+        build_daily_improvement_snapshot,
         record_strategy_outcome,
         resolve_contact_dimensions,
         resolve_sla_outcome,
         select_message_strategy,
+        update_strategy_ranking,
     )
-    from models import CalendarLink, ContactEnrichmentRun, ContactInteraction, ContactTask, Contato
+    from models import (
+        CalendarLink,
+        ContactEnrichmentRun,
+        ContactInteraction,
+        ContactTask,
+        Contato,
+        FeedbackReviewEntry,
+        FeedbackReviewSession,
+        IncomingMessageBuffer,
+        MessageStrategyRanking,
+        StrategyUpdateProposal,
+    )
     from readiness import READINESS_STATES, ReadinessInput, calculate_readiness, can_transition
     from whatsapp_sender import human_read_delay_ms, send_whatsapp_messages
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^\+?\d{10,15}$")
-VALID_PIPELINE = {"lead", "qualificado", "interesse", "proposta", "fechado", "perdido"}
+VALID_PIPELINE = {"lead", "qualificado", "interesse", "proposta", "fechado", "perdido", "follow_up_pause"}
+BOT_ROUTER_KEYWORDS = (
+    "bloco",
+    "unidade",
+    "apartamento",
+    "apto",
+    "torre",
+    "portaria",
+    "identifique",
+    "digite",
+)
+
+PROACTIVE_TIMEOUTS = (
+    ("timeout_72h", 72),
+    ("timeout_48h", 48),
+    ("timeout_24h", 24),
+)
+
+INTENT_TO_SPECIALIST = {
+    "greeting": "zind-crm-cold-contact",
+    "proactive_follow_up": "zind-crm-cold-contact",
+    "identity_check": "zind-crm-qualifier",
+    "interest_uncertain": "zind-crm-qualifier",
+    "objection_price": "zind-crm-qualifier",
+    "objection_time": "zind-crm-qualifier",
+    "objection_trust": "zind-crm-qualifier",
+    "objection_already_has_solution": "zind-crm-qualifier",
+    "objection_competitor": "zind-crm-qualifier",
+    "request_proof": "zind-crm-qualifier",
+    "bot_gatekeeper": "zind-crm-qualifier",
+    "out_of_scope_junk": "zind-crm-qualifier",
+    "interest_positive": "zind-crm-closer",
+    "request_demo_or_meeting": "zind-crm-closer",
+    "request_human": "zind-crm-handover",
+    "no_interest": "zind-crm-handover",
+    "escalate_frustration": "zind-crm-handover",
+}
 
 
 def _utcnow() -> datetime:
@@ -191,6 +248,161 @@ def _resolve_last_inbound_interaction(session, contato_id: str) -> ContactIntera
     )
 
 
+def _is_bot_router_message(text: str | None) -> bool:
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return False
+    return any(keyword in normalized for keyword in BOT_ROUTER_KEYWORDS)
+
+
+def _is_complete_message(text: str) -> tuple[bool, str]:
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return False, "empty"
+    if len(normalized) >= 120:
+        return True, "semantic_complete_long"
+    if "?" in normalized:
+        return True, "semantic_complete_question"
+    completion_markers = (
+        "pode",
+        "consigo",
+        "valor",
+        "preco",
+        "preço",
+        "agendar",
+        "reuniao",
+        "reunião",
+        "interesse",
+        "nao tenho interesse",
+        "não tenho interesse",
+    )
+    if any(marker in normalized for marker in completion_markers):
+        return True, "semantic_complete_marker"
+    return False, "incomplete"
+
+
+def _detect_intent(text: str, *, system_event: str | None = None) -> tuple[str, float]:
+    normalized = (text or "").strip().lower()
+    if system_event in {"timeout_24h", "timeout_48h", "timeout_72h"}:
+        return "proactive_follow_up", 0.95
+    if not normalized:
+        return "out_of_scope_junk", 0.2
+    if _is_bot_router_message(normalized):
+        return "bot_gatekeeper", 0.92
+    # escalate — explicit frustration signals
+    if any(word in normalized for word in (
+        "palhaçada", "absurdo", "ridículo", "ridiculo",
+        "lixo", "merda", "idiota", "porra", "puta",
+        "frustrad", "raiva", "indignado",
+    )):
+        return "escalate_frustration", 0.96
+    # no_interest — opt-out / removal requests
+    if any(phrase in normalized for phrase in (
+        "nao tenho interesse", "não tenho interesse",
+        "sem interesse", "nao quero", "não quero",
+        "para de me", "pare de me", "me remove", "remova",
+        "cancela", "cancelar", "descadastra",
+    )):
+        return "no_interest", 0.98
+    # request_human — wants a person
+    if any(word in normalized for word in (
+        "humano", "atendente", "pessoa real", "alguem real", "alguém real",
+        "falar com alguem", "falar com alguém", "gerente", "responsavel", "responsável",
+    )):
+        return "request_human", 0.9
+    # demo / meeting
+    if any(word in normalized for word in (
+        "demo", "demonstra", "agenda", "agendar",
+        "reuniao", "reunião", "call", "conversa rapida", "conversa rápida",
+    )):
+        return "request_demo_or_meeting", 0.92
+    # proof / material
+    if any(word in normalized for word in ("site", "video", "vídeo", "artigo", "case", "prova", "exemplo")):
+        return "request_proof", 0.84
+    # competitor / already has solution
+    if any(phrase in normalized for phrase in (
+        "concorrente", "ja uso", "já uso", "outra plataforma",
+        "outro sistema", "ja temos", "já temos", "ja usamos", "já usamos",
+        "ja tenho", "já tenho", "solucao parecida", "solução parecida",
+        "fornecedor", "contrato",
+    )):
+        if any(word in normalized for word in ("concorrente", "fornecedor", "contrato", "outra", "outro")):
+            return "objection_competitor", 0.88
+        return "objection_already_has_solution", 0.84
+    # price objection
+    if any(word in normalized for word in ("caro", "preco", "preço", "valor", "custo", "investimento")):
+        return "objection_price", 0.86
+    # time objection
+    if any(word in normalized for word in ("sem tempo", "tenho tempo", "depois", "mais tarde", "agora nao", "agora não", "nao tenho tempo", "não tenho tempo")):
+        return "objection_time", 0.8
+    # trust objection
+    if any(word in normalized for word in ("funciona", "confiavel", "confiável", "golpe", "fraude", "suspeito")):
+        return "objection_trust", 0.8
+    # greeting
+    if any(word in normalized for word in ("oi", "ola", "olá", "bom dia", "boa tarde", "boa noite")) and len(normalized) <= 30:
+        return "greeting", 0.72
+    # identity check (sindico, role, name)
+    if any(word in normalized for word in ("sindico", "síndico", "ainda atende", "quem é você", "quem e voce")):
+        return "identity_check", 0.74
+    # positive interest
+    if any(phrase in normalized for phrase in (
+        "tenho interesse", "quero saber", "gostei",
+        "faz sentido", "faz sentindo", "pode ser",
+        "pode avançar", "pode avancar", "quero avançar",
+    )):
+        return "interest_positive", 0.77
+    if normalized in ("sim", "claro", "ok", "okay", "top", "show"):
+        return "interest_positive", 0.7
+    # uncertain
+    if any(word in normalized for word in ("talvez", "não sei", "nao sei", "como funciona", "me explica")):
+        return "interest_uncertain", 0.68
+    if len(normalized) <= 3:
+        return "out_of_scope_junk", 0.45
+    return "interest_uncertain", 0.55
+
+
+def _policy_flags_for_intent(intent: str, *, is_audio: bool = False) -> list[str]:
+    flags: list[str] = []
+    if intent == "proactive_follow_up":
+        flags.append("soft_ping")
+    if intent == "escalate_frustration":
+        flags.append("urgent_handover")
+    if intent == "request_human":
+        flags.append("handover_requested")
+    if is_audio:
+        flags.append("audio_origin_informal_ok")
+    if intent == "no_interest":
+        flags.append("block_and_stop")
+    return flags
+
+
+def _has_outbound_conversation(session, contato_id: str) -> bool:
+    row = (
+        session.query(ContactInteraction)
+        .filter(
+            ContactInteraction.contato_id == contato_id,
+            ContactInteraction.direction == "outbound",
+            ContactInteraction.kind == "conversation",
+        )
+        .first()
+    )
+    return row is not None
+
+
+def _resolve_archetype_hint_for_outreach(session, contato: Contato, *, channel: str) -> str | None:
+    if channel != "whatsapp":
+        return None
+
+    latest_inbound = _resolve_last_inbound_interaction(session, str(contato.id))
+    if latest_inbound and _is_bot_router_message(latest_inbound.content_summary):
+        return "bot_router_vendor_pitch"
+
+    if (contato.pipeline_status or "").strip().lower() == "lead" and not _has_outbound_conversation(session, str(contato.id)):
+        return "human_direct_probe_3step"
+
+    return None
+
+
 def _resolve_messages_for_whatsapp_send(
     session,
     contato: Contato,
@@ -211,7 +423,13 @@ def _resolve_messages_for_whatsapp_send(
         if draft_row.draft_text and draft_row.draft_text.strip():
             return [draft_row.draft_text.strip()]
 
-    strategy = select_message_strategy(session, contato, channel="whatsapp")
+    archetype_hint = _resolve_archetype_hint_for_outreach(session, contato, channel="whatsapp")
+    strategy = select_message_strategy(
+        session,
+        contato,
+        channel="whatsapp",
+        archetype_hint=archetype_hint,
+    )
     payload = build_personalized_draft(contato, channel="whatsapp", strategy=strategy)
     auto_messages = payload.get("messages") or [payload.get("draft", "")]
     return [str(msg).strip() for msg in auto_messages if str(msg).strip()]
@@ -547,7 +765,13 @@ def create_personalized_outreach_draft(contact_id: str, channel: str = "whatsapp
         if channel == "email" and not _is_valid_email(contato.email):
             return {"error": "Canal email indisponível para este contato."}
 
-        strategy = select_message_strategy(session, contato, channel=channel)
+        archetype_hint = _resolve_archetype_hint_for_outreach(session, contato, channel=channel)
+        strategy = select_message_strategy(
+            session,
+            contato,
+            channel=channel,
+            archetype_hint=archetype_hint,
+        )
         apply_inference_to_contact(contato, strategy)
         payload = build_personalized_draft(contato, channel=channel, strategy=strategy)
         draft = payload["draft"]
@@ -626,7 +850,13 @@ def approve_first_touch(
             approval_metadata = _deserialize_json(draft_row.metadata_json)
 
         if not draft_text:
-            strategy = select_message_strategy(session, contato, channel=channel)
+            archetype_hint = _resolve_archetype_hint_for_outreach(session, contato, channel=channel)
+            strategy = select_message_strategy(
+                session,
+                contato,
+                channel=channel,
+                archetype_hint=archetype_hint,
+            )
             apply_inference_to_contact(contato, strategy)
             payload = build_personalized_draft(contato, channel=channel, strategy=strategy)
             draft_text = payload["draft"]
@@ -864,6 +1094,8 @@ def log_conversation_event(
             return {"error": f"Contato {contact_id} não encontrado."}
 
         metadata_payload: dict[str, Any] = dict(metadata or {})
+        if direction == "inbound" and _is_bot_router_message(content_summary):
+            metadata_payload["detected_bot_router"] = True
         linked_draft = None
         if draft_interaction_id:
             linked_draft = (
@@ -1059,6 +1291,591 @@ def send_daily_improvement_report(
             return result
         except Exception as exc:
             return {"error": f"Falha no relatório diário de melhoria: {exc}"}
+
+
+def buffer_incoming_messages(
+    lead_id: str,
+    event_text: str,
+    *,
+    channel: str = "whatsapp",
+    message_id: str | None = None,
+    max_hold_ms: int = 20000,
+    max_msgs: int = 6,
+    max_chars: int = 1000,
+) -> dict:
+    with get_session() as session:
+        contato = session.query(Contato).filter(Contato.id == lead_id, Contato.ativo == True).first()  # noqa: E712
+        if not contato:
+            return {"error": f"Contato {lead_id} não encontrado."}
+
+        text = (event_text or "").strip()
+        if not text:
+            return {"error": "event_text obrigatório."}
+
+        now = _utcnow()
+        open_buffer = (
+            session.query(IncomingMessageBuffer)
+            .filter(
+                IncomingMessageBuffer.contato_id == contato.id,
+                IncomingMessageBuffer.channel == channel,
+                IncomingMessageBuffer.status == "open",
+            )
+            .order_by(IncomingMessageBuffer.created_at.desc())
+            .first()
+        )
+
+        if not open_buffer:
+            payload = {"messages": [], "message_ids": []}
+            open_buffer = IncomingMessageBuffer(
+                contato_id=contato.id,
+                channel=channel,
+                status="open",
+                grouped_count=0,
+                payload_json=_serialize_json(payload),
+            )
+            session.add(open_buffer)
+            session.flush()
+
+        payload = _deserialize_json(open_buffer.payload_json)
+        messages = list(payload.get("messages") or [])
+        message_ids = list(payload.get("message_ids") or [])
+        if message_id and message_id in message_ids:
+            grouped_count = int(open_buffer.grouped_count or len(messages))
+            return {
+                "lead_id": str(contato.id),
+                "buffer_id": str(open_buffer.id),
+                "status": "open",
+                "grouped_count": grouped_count,
+                "flush_reason": None,
+                "payload": None,
+                "idempotent": True,
+            }
+
+        messages.append(text)
+        if message_id:
+            message_ids.append(message_id)
+        joined = " ".join(msg.strip() for msg in messages if (msg or "").strip())
+        grouped_count = len(messages)
+
+        elapsed_ms = max(int((now - open_buffer.created_at).total_seconds() * 1000), 0) if open_buffer.created_at else 0
+
+        complete, completion_reason = _is_complete_message(joined)
+        flush_reason = None
+        if grouped_count >= max_msgs:
+            flush_reason = "guardrail_count"
+        elif len(joined) >= max_chars:
+            flush_reason = "guardrail_size"
+        elif complete:
+            flush_reason = completion_reason
+        elif elapsed_ms >= max_hold_ms:
+            flush_reason = "guardrail_time"
+
+        payload = {"messages": messages, "message_ids": message_ids, "joined_text": joined}
+        open_buffer.payload_json = _serialize_json(payload)
+        open_buffer.grouped_count = grouped_count
+        open_buffer.updated_at = now
+
+        if flush_reason:
+            open_buffer.status = "flushed"
+            open_buffer.flush_reason = flush_reason
+            open_buffer.flushed_at = now
+            return {
+                "lead_id": str(contato.id),
+                "buffer_id": str(open_buffer.id),
+                "status": "flushed",
+                "grouped_count": grouped_count,
+                "flush_reason": flush_reason,
+                "payload": {
+                    "text": joined,
+                    "messages": messages,
+                    "channel": channel,
+                },
+                "idempotent": False,
+            }
+
+        return {
+            "lead_id": str(contato.id),
+            "buffer_id": str(open_buffer.id),
+            "status": "open",
+            "grouped_count": grouped_count,
+            "flush_reason": None,
+            "payload": None,
+            "idempotent": False,
+        }
+
+
+def transcribe_incoming_audio(
+    message_id: str,
+    media_ref: str,
+    *,
+    transcript_hint: str | None = None,
+) -> dict:
+    if (transcript_hint or "").strip():
+        return {
+            "message_id": message_id,
+            "text": transcript_hint.strip(),
+            "confidence": 0.95,
+            "provider": "hint",
+        }
+
+    ref = (media_ref or "").strip()
+    if not ref:
+        return {"error": "media_ref obrigatório."}
+
+    if ref.lower().startswith("text:"):
+        return {
+            "message_id": message_id,
+            "text": ref[5:].strip(),
+            "confidence": 0.9,
+            "provider": "text_ref",
+        }
+
+    m = re.search(r"transcript=([^&]+)", ref, flags=re.IGNORECASE)
+    if m:
+        try:
+            from urllib.parse import unquote_plus
+
+            text = unquote_plus(m.group(1)).strip()
+            if text:
+                return {
+                    "message_id": message_id,
+                    "text": text,
+                    "confidence": 0.85,
+                    "provider": "query_transcript",
+                }
+        except Exception:
+            pass
+
+    return {
+        "message_id": message_id,
+        "text": "",
+        "confidence": 0.0,
+        "provider": "unavailable",
+        "error": "Transcrição automática indisponível. Informe transcript_hint ou media_ref com transcript.",
+    }
+
+
+def route_conversation_turn(
+    payload: dict[str, Any],
+) -> dict:
+    text = str(payload.get("text") or "").strip()
+    if not text and not payload.get("system_event"):
+        return {"error": "payload.text obrigatório (ou system_event)."}
+
+    system_event = str(payload.get("system_event") or "").strip() or None
+    is_audio = bool(payload.get("is_audio"))
+    intent, confidence = _detect_intent(text, system_event=system_event)
+    specialist = INTENT_TO_SPECIALIST.get(intent, "qualifier-agent")
+    policy_flags = _policy_flags_for_intent(intent, is_audio=is_audio)
+
+    return {
+        "intent": intent,
+        "confidence": round(float(confidence), 4),
+        "specialist": specialist,
+        "policy_flags": policy_flags,
+    }
+
+
+def _resolve_last_internal_timeout(session, contato_id: str, event_type: str, reference_outbound_at: datetime | None) -> bool:
+    query = (
+        session.query(ContactInteraction)
+        .filter(
+            ContactInteraction.contato_id == contato_id,
+            ContactInteraction.direction == "internal",
+            ContactInteraction.kind == "system_event",
+            ContactInteraction.outcome == event_type,
+        )
+        .order_by(ContactInteraction.created_at.desc())
+    )
+    row = query.first()
+    if not row:
+        return False
+    if reference_outbound_at and row.created_at and row.created_at < reference_outbound_at:
+        return False
+    return True
+
+
+def evaluate_dormant_leads(
+    *,
+    ruleset: dict[str, Any] | None = None,
+    limit: int = 50,
+) -> dict:
+    now = _utcnow()
+    cfg = dict(ruleset or {})
+    first_sla = int(cfg.get("first_sla_hours", 24) or 24)
+    second_sla = int(cfg.get("second_sla_hours", first_sla * 2) or (first_sla * 2))
+    third_sla = int(cfg.get("third_sla_hours", max(second_sla + first_sla, 72)) or max(second_sla + first_sla, 72))
+    pause_after_72h = bool(cfg.get("pause_after_72h", True))
+    review_owner = str(cfg.get("pause_review_owner", "sales_manager"))
+    review_channel = str(cfg.get("pause_review_channel", "discord"))
+    windows = (
+        ("timeout_72h", third_sla),
+        ("timeout_48h", second_sla),
+        ("timeout_24h", first_sla),
+    )
+
+    with get_session() as session:
+        contatos = (
+            session.query(Contato)
+            .filter(
+                Contato.ativo == True,  # noqa: E712
+                Contato.do_not_contact == False,  # noqa: E712
+                or_(
+                    Contato.pipeline_status == None,  # noqa: E711
+                    ~Contato.pipeline_status.in_(["fechado", "perdido", "follow_up_pause"]),
+                ),
+            )
+            .limit(limit)
+            .all()
+        )
+
+        triggered: list[dict[str, Any]] = []
+        paused_contacts = 0
+        created_review_tasks = 0
+        skipped = 0
+        for contato in contatos:
+            last_outbound_at = _resolve_last_outbound_at(session, str(contato.id))
+            if not last_outbound_at:
+                skipped += 1
+                continue
+
+            latest_inbound = _resolve_last_inbound_interaction(session, str(contato.id))
+            if latest_inbound and latest_inbound.created_at and latest_inbound.created_at > last_outbound_at:
+                skipped += 1
+                continue
+
+            elapsed_hours = max((now - last_outbound_at).total_seconds() / 3600.0, 0.0)
+            event_type = None
+            threshold = None
+            for candidate_event, threshold_hours in windows:
+                if elapsed_hours >= threshold_hours:
+                    event_type = candidate_event
+                    threshold = threshold_hours
+                    break
+            if not event_type:
+                skipped += 1
+                continue
+
+            already_triggered = _resolve_last_internal_timeout(
+                session,
+                str(contato.id),
+                event_type=event_type,
+                reference_outbound_at=last_outbound_at,
+            )
+            if already_triggered:
+                skipped += 1
+                continue
+
+            interaction = ContactInteraction(
+                contato_id=contato.id,
+                channel="whatsapp",
+                direction="internal",
+                kind="system_event",
+                content_summary=f"Evento proativo disparado: {event_type}",
+                outcome=event_type,
+                intent="proactive_follow_up",
+                metadata_json=_serialize_json(
+                    {
+                        "deliver": False,
+                        "event_type": event_type,
+                        "elapsed_hours": round(elapsed_hours, 2),
+                        "threshold_hours": threshold,
+                    }
+                ),
+            )
+            session.add(interaction)
+            if pause_after_72h and event_type == "timeout_72h":
+                contato.pipeline_status = "follow_up_pause"
+                contato.updated_at = now
+                paused_contacts += 1
+                review_task = ContactTask(
+                    contato_id=contato.id,
+                    owner=review_owner,
+                    objective="Revisar lead pausado apos 72h sem resposta e decidir proximo passo.",
+                    channel=review_channel,
+                    status="open",
+                    priority="high",
+                    due_at=now + timedelta(hours=4),
+                    sla_hours=24,
+                    sync_calendar=False,
+                )
+                session.add(review_task)
+                created_review_tasks += 1
+
+            triggered.append(
+                {
+                    "contact_id": str(contato.id),
+                    "event_type": event_type,
+                    "elapsed_hours": round(elapsed_hours, 2),
+                    "interaction_id": str(interaction.id),
+                }
+            )
+
+        return {
+            "evaluated": len(contatos),
+            "triggered": len(triggered),
+            "paused_contacts": paused_contacts,
+            "review_tasks_created": created_review_tasks,
+            "skipped": skipped,
+            "events": triggered,
+            "windows_hours": {
+                "timeout_24h": first_sla,
+                "timeout_48h": second_sla,
+                "timeout_72h": third_sla,
+            },
+        }
+
+
+def start_feedback_review_session(
+    batch_id: str,
+    *,
+    stage: str | None = None,
+    city: str | None = None,
+    client_type: str | None = None,
+    thread_ref: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict:
+    with get_session() as session:
+        review_session = FeedbackReviewSession(
+            batch_id=batch_id,
+            stage=stage,
+            city=city,
+            client_type=client_type,
+            status="open",
+            thread_ref=thread_ref,
+            metadata_json=_serialize_json(metadata),
+        )
+        session.add(review_session)
+        session.flush()
+        return {"session": review_session.to_dict()}
+
+
+def record_human_feedback(
+    session_id: str,
+    feedback_text: str,
+    *,
+    tags: list[str] | None = None,
+    author: str = "sales_reviewer",
+    metadata: dict[str, Any] | None = None,
+) -> dict:
+    with get_session() as session:
+        review_session = (
+            session.query(FeedbackReviewSession)
+            .filter(FeedbackReviewSession.id == session_id)
+            .first()
+        )
+        if not review_session:
+            return {"error": f"Sessão de review {session_id} não encontrada."}
+        if review_session.status != "open":
+            return {"error": f"Sessão {session_id} não está aberta para feedback."}
+
+        entry = FeedbackReviewEntry(
+            session_id=review_session.id,
+            author=author or "sales_reviewer",
+            feedback_text=(feedback_text or "").strip(),
+            tags_json=_serialize_json({"tags": tags or []}),
+            metadata_json=_serialize_json(metadata),
+        )
+        session.add(entry)
+        review_session.updated_at = _utcnow()
+        session.flush()
+        return {"entry": entry.to_dict(), "session": review_session.to_dict()}
+
+
+def _filtered_rankings_for_review(session, review_session: FeedbackReviewSession, top_n: int = 5) -> tuple[list[MessageStrategyRanking], list[MessageStrategyRanking]]:
+    query = session.query(MessageStrategyRanking).filter(MessageStrategyRanking.attempts > 0)
+    if review_session.stage:
+        query = query.filter(MessageStrategyRanking.stage == review_session.stage)
+    if review_session.city:
+        query = query.filter(MessageStrategyRanking.city == review_session.city)
+    if review_session.client_type:
+        query = query.filter(MessageStrategyRanking.client_type == review_session.client_type)
+    top = query.order_by(MessageStrategyRanking.smoothed_score.desc(), MessageStrategyRanking.attempts.desc()).limit(top_n).all()
+    bottom = query.order_by(MessageStrategyRanking.smoothed_score.asc(), MessageStrategyRanking.attempts.desc()).limit(top_n).all()
+    return top, bottom
+
+
+def generate_strategy_update_proposal(
+    session_id: str,
+    *,
+    proposed_by: str = "feedback-reviewer-agent",
+    top_n: int = 5,
+) -> dict:
+    with get_session() as session:
+        review_session = (
+            session.query(FeedbackReviewSession)
+            .filter(FeedbackReviewSession.id == session_id)
+            .first()
+        )
+        if not review_session:
+            return {"error": f"Sessão de review {session_id} não encontrada."}
+
+        top_rankings, bottom_rankings = _filtered_rankings_for_review(session, review_session, top_n=top_n)
+        feedback_entries = (
+            session.query(FeedbackReviewEntry)
+            .filter(FeedbackReviewEntry.session_id == review_session.id)
+            .order_by(FeedbackReviewEntry.created_at.asc())
+            .all()
+        )
+        feedback_texts = [entry.feedback_text for entry in feedback_entries]
+        snapshot = build_daily_improvement_snapshot(session, top_n=top_n)
+
+        adjustments: list[dict[str, Any]] = []
+        for row in top_rankings:
+            adjustments.append(
+                {
+                    "action": "promote",
+                    "strategy_key": row.strategy_key,
+                    "score_delta": 2.0,
+                }
+            )
+        for row in bottom_rankings:
+            adjustments.append(
+                {
+                    "action": "demote",
+                    "strategy_key": row.strategy_key,
+                    "score_delta": -2.0,
+                }
+            )
+
+        normalized_feedback = " ".join(feedback_texts).lower()
+        if "pausa" in normalized_feedback or "parar" in normalized_feedback:
+            for row in bottom_rankings[:2]:
+                adjustments.append(
+                    {
+                        "action": "pause",
+                        "strategy_key": row.strategy_key,
+                        "score_delta": -6.0,
+                    }
+                )
+
+        proposal_batch_id = f"proposal-{uuid.uuid4().hex[:12]}"
+        proposal_payload = {
+            "scope": {
+                "batch_id": review_session.batch_id,
+                "stage": review_session.stage,
+                "city": review_session.city,
+                "client_type": review_session.client_type,
+            },
+            "feedback": feedback_texts,
+            "snapshot": snapshot,
+            "adjustments": adjustments,
+            "generated_at": _utcnow().isoformat(),
+        }
+        proposal = StrategyUpdateProposal(
+            session_id=review_session.id,
+            proposal_batch_id=proposal_batch_id,
+            status="pending_approval",
+            proposed_by=proposed_by,
+            proposal_json=_serialize_json(proposal_payload) or "{}",
+            decision_notes="auto_submitted_from_draft_review",
+        )
+        session.add(proposal)
+        review_session.updated_at = _utcnow()
+        session.flush()
+        return {"proposal": proposal.to_dict(), "payload": proposal_payload}
+
+
+def _apply_strategy_adjustment(session, item: dict[str, Any], *, now: datetime) -> bool:
+    strategy_key = str(item.get("strategy_key") or "").strip()
+    if not strategy_key:
+        return False
+    row = session.query(MessageStrategyRanking).filter(MessageStrategyRanking.strategy_key == strategy_key).first()
+    if not row:
+        return False
+
+    score_delta = float(item.get("score_delta", 0.0))
+    if score_delta == 0.0:
+        return False
+
+    updated = update_strategy_ranking(
+        session,
+        stage=row.stage,
+        client_type=row.client_type,
+        city=row.city,
+        region=row.region,
+        channel=row.channel,
+        message_archetype=row.message_archetype,
+        strategy_key=row.strategy_key,
+        score_delta=score_delta,
+        outcome_at=now,
+    )
+    if item.get("action") == "pause":
+        updated.low_confidence = True
+    return True
+
+
+def approve_strategy_updates(
+    proposal_batch_id: str,
+    approver: str,
+    *,
+    decision_notes: str | None = None,
+) -> dict:
+    with get_session() as session:
+        proposal = (
+            session.query(StrategyUpdateProposal)
+            .filter(StrategyUpdateProposal.proposal_batch_id == proposal_batch_id)
+            .first()
+        )
+        if not proposal:
+            return {"error": f"Proposal {proposal_batch_id} não encontrada."}
+        if proposal.status != "pending_approval":
+            return {"error": f"Proposal {proposal_batch_id} em status inválido: {proposal.status}."}
+
+        payload = _deserialize_json(proposal.proposal_json)
+        adjustments = payload.get("adjustments") if isinstance(payload, dict) else []
+        now = _utcnow()
+        applied_count = 0
+        for item in adjustments if isinstance(adjustments, list) else []:
+            if isinstance(item, dict) and _apply_strategy_adjustment(session, item, now=now):
+                applied_count += 1
+
+        proposal.status = "approved"
+        proposal.approved_by = approver
+        proposal.rejected_reason = None
+        proposal.decision_notes = decision_notes
+        proposal.updated_at = now
+
+        review_session = (
+            session.query(FeedbackReviewSession)
+            .filter(FeedbackReviewSession.id == proposal.session_id)
+            .first()
+        )
+        if review_session:
+            review_session.status = "closed"
+            review_session.updated_at = now
+        session.flush()
+        return {"proposal": proposal.to_dict(), "applied_adjustments": applied_count}
+
+
+def reject_strategy_updates(
+    proposal_batch_id: str,
+    reason: str,
+) -> dict:
+    with get_session() as session:
+        proposal = (
+            session.query(StrategyUpdateProposal)
+            .filter(StrategyUpdateProposal.proposal_batch_id == proposal_batch_id)
+            .first()
+        )
+        if not proposal:
+            return {"error": f"Proposal {proposal_batch_id} não encontrada."}
+        if proposal.status not in {"pending_approval", "draft_review"}:
+            return {"error": f"Proposal {proposal_batch_id} em status inválido: {proposal.status}."}
+
+        proposal.status = "rejected"
+        proposal.rejected_reason = reason
+        proposal.updated_at = _utcnow()
+        review_session = (
+            session.query(FeedbackReviewSession)
+            .filter(FeedbackReviewSession.id == proposal.session_id)
+            .first()
+        )
+        if review_session:
+            review_session.status = "closed"
+            review_session.updated_at = _utcnow()
+        session.flush()
+        return {"proposal": proposal.to_dict()}
 
 
 def list_contacts_to_follow_up(hours_since_last_contact: int = 24, limit: int = 10) -> list[dict]:

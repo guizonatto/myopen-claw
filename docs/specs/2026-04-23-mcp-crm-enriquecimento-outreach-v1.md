@@ -169,6 +169,30 @@ Fluxo de mensagem:
   - sem promessa vaga de marketing
   - com contexto real do lead na abertura
 
+Playbooks operacionais (lead / WhatsApp):
+
+- `human_direct_probe_3step` (contato humano direto, sem indício de bot):
+  1. `Ola {nome}, tudo bem?`
+  2. `Vi seu contato no Google.`
+  3. `Voce ainda atende como sindico profissional?`
+- Objetivo: abrir conversa com baixa friccao e validar rapidamente se o contato correto ainda atende.
+- Características: mensagens curtas, uma intenção por mensagem, sem pitch longo no primeiro bloco.
+
+- `bot_router_vendor_pitch` (quando inbound indicar bot/portaria/URA, por exemplo pedindo bloco/unidade):
+  - mensagem única mais completa, contextualizando que somos fornecedores para síndicos profissionais.
+  - incluir CTA para envio de materiais de prova:
+    - vídeo curto
+    - site da Zind
+    - 3 artigos do blog da Zind
+- Objetivo: passar pelo gate do bot/portaria com contexto suficiente, evitando sequência de mensagens curtas que tende a ser bloqueada.
+
+Detecção de bot/portaria (v1):
+
+- baseada no último inbound por WhatsApp (`content_summary`) com palavras-chave como:
+  - `bloco`, `unidade`, `apartamento`, `apto`, `torre`, `portaria`, `identifique`, `digite`
+- quando detectar, o draft deve forçar `message_archetype=bot_router_vendor_pitch`.
+- sem detecção e em primeiro toque `stage=lead`, priorizar `message_archetype=human_direct_probe_3step`.
+
 ## Learning by Stage/Client Type/City
 
 - Unidade de aprendizado (strategy key):
@@ -296,6 +320,59 @@ Regra de impacto em produção:
 - simulação **não atualiza** `message_strategy_outcomes`/`message_strategy_rankings` de produção.
 - uso exclusivo para análise e tuning manual.
 
+## Zind Brand Guardrail + Memory Sources
+
+- O `sales-sim` deve representar **exclusivamente a Zind**.
+- É proibido citar outra empresa/marca como se fosse a empresa do vendedor.
+- O prompt do `sales-sim` deve incluir contexto curto vindo do Vault da Zind (fonte canônica):
+  - alvo primário: `2000-Knowledge/Empresas/Zind/ZIND_MOC.md`
+  - apoio: `2000-Knowledge/Empresas/Zind/PITCH_VENDAS.md`
+  - fallback: `0000-Atlas/Zind.md`
+- Contexto injetado deve ser resumido e limitado (evitar inflar token).
+- Persistir em metadata da simulação:
+  - `zind_context_sources` (arquivos usados no prompt)
+  - `memory_health` com status de:
+    - `vault_has_zind_context`
+    - `qdrant_has_zind_context` (amostragem de payloads)
+    - `qdrant_collections`
+- Se Qdrant não tiver evidência de conteúdo Zind, a simulação continua usando Vault e registra aviso em metadata.
+
+### Qdrant Sync (Zind Context)
+
+- Objetivo: garantir que o conteúdo comercial da Zind também esteja vetorizado no Qdrant.
+- Comportamento:
+  - ler arquivos de contexto da Zind no Vault
+  - quebrar em chunks curtos
+  - gerar embedding por chunk (com fallback determinístico quando embedding externo não estiver disponível)
+  - fazer upsert idempotente em coleção Qdrant preferencial (`cortex_memories_tenant_claw`, fallback `cortex_memories`)
+- IDs devem ser determinísticos por `source_path + chunk_index` para evitar duplicação.
+- Payload mínimo por ponto:
+  - `brand="zind"`
+  - `source="zind_vault_sync"`
+  - `source_path`
+  - `chunk_index`
+  - `content`
+  - `created_at`
+- Resultado da sincronização deve ser salvo em metadata (`zind_qdrant_sync`) com:
+  - coleção escolhida
+  - dimensão vetorial
+  - quantidade de pontos upsertados
+  - warnings/erros
+
+## Token Efficiency Guardrails (Simulation)
+
+- Objetivo: reduzir custo de token e ruído no prompt dos agentes de simulação.
+- Regras:
+  - remover aliases MCP legados (`crm`, `shopping`, `trends`) para evitar duplicação de tools no runtime
+  - manter apenas IDs canônicos (`mcp-crm`, `mcp-shopping`, `mcp-trends`, `mcp-leads`)
+  - configurar `sim-control`, `sales-sim` e `sindico-sim` com `tools.profile="messaging"`
+  - manter `allow/deny` mínimo por agente (privilégio mínimo)
+  - executar reconciliação pós-onboarding para limpar sobras de configuração no mesmo boot
+- Resultado esperado:
+  - menos schema injetado no system prompt
+  - menor consumo de tokens por turno
+  - menor risco de “vazamento” de contexto não necessário
+
 ## Tracker de implementação
 
 - [x] Modelo de prontidão (`readiness_score`, penalidades, hard blocks)
@@ -315,6 +392,11 @@ Regra de impacto em produção:
 - [x] Simulação Discord com dois agentes isolados (`sales-sim` x `sindico-sim`) e orquestrador `sim-control`
 - [x] Runner manual `sim start ...` com thread + transcript + resumo final
 - [x] Persistência separada de simulação sem impacto no learning de produção
+- [x] Guardrails de eficiência de token na simulação (perfil `messaging` + limpeza de aliases MCP + reconcile pós-onboarding)
+- [x] Guardrail de marca Zind no `sales-sim` (sem desvio para marcas externas)
+- [x] Injeção de contexto comercial da Zind via Vault no prompt de simulação
+- [x] Diagnóstico de cobertura de memória (Vault + Qdrant) salvo na metadata da simulação
+- [x] Sincronização idempotente de contexto Zind no Qdrant durante execução de simulação
 
 ## Test Plan (Pre-Implementation Documentation)
 

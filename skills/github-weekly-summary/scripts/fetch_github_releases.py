@@ -1,71 +1,123 @@
+"""
+Script: fetch_github_releases.py
+Função: Busca releases e commits da última semana nos repositórios configurados via GitHub API
+Usar quando: Coleta semanal de dados do GitHub para o pipeline github-weekly-summary
+
+ENV_VARS:
+  - GITHUB_TOKEN: token pessoal do GitHub com acesso de leitura aos repositórios
+  - GITHUB_REPO: lista de repositórios separados por vírgula (ex: org1/repo1,org2/repo2)
+
+DB_TABLES:
+  - (nenhuma)
+"""
+
 import os
 import requests
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
-# =====================================================================
-# 1. CONFIGURAÇÕES
-# =====================================================================
 load_dotenv()
 
-JIRA_TOKEN = os.environ.get('JIRA_TOKEN') 
-JIRA_URL = os.environ.get('JIRA_BASE_URL', 'https://zind-team.atlassian.net').rstrip('/')
-JIRA_EMAIL = os.environ.get('JIRA_EMAIL')
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPOS = [r.strip() for r in os.environ.get("GITHUB_REPO", "").split(",") if r.strip()]
 
-def audit_jira():
-    print(f"🕵️ Investigando o usuário: {JIRA_EMAIL}")
-    auth = (JIRA_EMAIL, JIRA_TOKEN)
-    headers = {"Accept": "application/json"}
+HEADERS = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
 
-    # --- PASSO 1: QUEM SOU EU? ---
-    # Verifica se o Token pertence mesmo ao e-mail configurado
-    print("\n1️⃣ Verificando Identidade...")
+ONE_WEEK_AGO = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+
+def _get(url, params=None):
+    resp = requests.get(url, headers=HEADERS, params=params, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _fetch_releases(repo):
+    releases = []
+    page = 1
+    while True:
+        data = _get(f"https://api.github.com/repos/{repo}/releases", params={"per_page": 50, "page": page})
+        if not data:
+            break
+        for r in data:
+            published = r.get("published_at") or ""
+            if published < ONE_WEEK_AGO:
+                return releases
+            releases.append({
+                "repo": repo,
+                "tag": r.get("tag_name"),
+                "name": r.get("name"),
+                "body": r.get("body", ""),
+                "published_at": published,
+                "url": r.get("html_url"),
+                "author": (r.get("author") or {}).get("login"),
+            })
+        page += 1
+    return releases
+
+
+def _fetch_commits(repo):
+    commits = []
     try:
-        res_me = requests.get(f"{JIRA_URL}/rest/api/3/myself", auth=auth, headers=headers)
-        if res_me.status_code == 200:
-            user_data = res_me.json()
-            print(f"✅ Identificado como: {user_data.get('displayName')} (ID: {user_data.get('accountId')})")
-        else:
-            print(f"❌ Erro ao identificar usuário: {res_me.status_code}")
-            return
-    except Exception as e:
-        print(f"❌ Falha de conexão: {e}")
-        return
+        branches_data = _get(f"https://api.github.com/repos/{repo}/branches")
+        branches = [b["name"] for b in branches_data]
+    except Exception:
+        branches = ["main", "master"]
 
-    # --- PASSO 2: QUAIS PROJETOS EU ENXERGO? ---
-    # Se o projeto ZIN não aparecer aqui, o Token não tem acesso a ele
-    print("\n2️⃣ Listando projetos visíveis para este Token...")
-    try:
-        res_proj = requests.get(f"{JIRA_URL}/rest/api/3/project", auth=auth, headers=headers)
-        if res_proj.status_code == 200:
-            projects = res_proj.json()
-            if not projects:
-                print("⚠️ O Token não enxerga NENHUM projeto. (Problema de Permissão)")
-            else:
-                for p in projects:
-                    print(f"   - Projeto: {p.get('name')} | Key: {p.get('key')}")
-        else:
-            print(f"❌ Erro ao listar projetos: {res_proj.status_code}")
-    except Exception as e:
-        print(f"❌ Falha ao listar projetos: {e}")
+    seen = set()
+    for branch in branches:
+        page = 1
+        while True:
+            try:
+                data = _get(
+                    f"https://api.github.com/repos/{repo}/commits",
+                    params={"sha": branch, "since": ONE_WEEK_AGO, "per_page": 50, "page": page},
+                )
+            except Exception:
+                break
+            if not data:
+                break
+            for c in data:
+                sha = c.get("sha")
+                if sha in seen:
+                    continue
+                seen.add(sha)
+                commit_info = c.get("commit", {})
+                commits.append({
+                    "repo": repo,
+                    "branch": branch,
+                    "sha": sha[:8] if sha else "",
+                    "message": (commit_info.get("message") or "").split("\n")[0],
+                    "author": (commit_info.get("author") or {}).get("name"),
+                    "date": (commit_info.get("author") or {}).get("date"),
+                    "url": c.get("html_url", ""),
+                })
+            page += 1
 
-    # --- PASSO 3: TOTAL DE ISSUES NO JIRA INTEIRO ---
-    print("\n3️⃣ Buscando total de issues acessíveis no domínio...")
-    try:
-        search_url = f"{JIRA_URL}/rest/api/3/search/jql"
-        # JQL vazio traz tudo o que o usuário tem permissão de ver
-        res_search = requests.post(
-            search_url, 
-            auth=auth, 
-            json={"jql": "", "maxResults": 1}, 
-            headers={"Content-Type": "application/json"}
-        )
-        if res_search.status_code == 200:
-            total = res_search.json().get('total', 0)
-            print(f"📊 Total de issues visíveis para você: {total}")
-        else:
-            print(f"❌ Erro na busca global: {res_search.status_code}")
-    except Exception as e:
-        print(f"❌ Falha na busca: {e}")
+    return commits
+
+
+def fetch_weekly_releases_and_commits():
+    all_releases = []
+    all_commits = []
+    for repo in GITHUB_REPOS:
+        try:
+            all_releases.extend(_fetch_releases(repo))
+        except Exception as e:
+            print(f"[WARN] Releases do repositório {repo}: {e}")
+        try:
+            all_commits.extend(_fetch_commits(repo))
+        except Exception as e:
+            print(f"[WARN] Commits do repositório {repo}: {e}")
+    return {"releases": all_releases, "commits": all_commits}
+
 
 if __name__ == "__main__":
-    audit_jira()
+    import json
+    data = fetch_weekly_releases_and_commits()
+    print(f"Releases: {len(data['releases'])}, Commits: {len(data['commits'])}")
+    print(json.dumps(data, indent=2, ensure_ascii=False))

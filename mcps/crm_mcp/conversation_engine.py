@@ -57,6 +57,25 @@ def _build_message_parts(
     template_hint: str,
     archetype: str,
 ) -> tuple[str, str, str]:
+    archetype = (archetype or "").strip().lower()
+    if archetype == "human_direct_probe_3step":
+        return (
+            _normalize_spaces(f"Ola {first_name}, tudo bem?"),
+            "Vi seu contato no Google.",
+            "Voce ainda atende como sindico profissional?",
+        )
+
+    if archetype == "bot_router_vendor_pitch":
+        opening = "Ola, sou da Zind."
+        context = (
+            "Somos fornecedores de um sistema para sindicos profissionais, "
+            "pensado para o dia a dia da sindicatura."
+        )
+        cta_line = (
+            "Se fizer sentido, envio um video rapido, o site da Zind e 3 artigos do blog."
+        )
+        return _normalize_spaces(opening), _normalize_spaces(context), _normalize_spaces(cta_line)
+
     compact_signal = f" Vi um sinal recente: {_clip(signal_text, 72)}." if signal_text else ""
     compact_pain = _clip(pain, 88)
     compact_company = _clip(company, 42)
@@ -175,7 +194,10 @@ def build_personalized_draft(contato: Any, channel: str = "whatsapp", strategy: 
 
     rules = _load_json("human_rules.json")
     split_after = int(rules.get("split_after_whatsapp_chars", 220))
-    if channel == "whatsapp":
+    if channel == "whatsapp" and message_archetype == "human_direct_probe_3step":
+        messages = [chunk for chunk in [part_a, part_b, part_cta] if chunk]
+        split_applied = len(messages) > 1
+    elif channel == "whatsapp":
         messages, split_applied = _split_whatsapp_messages(
             draft=draft,
             part_a=part_a,

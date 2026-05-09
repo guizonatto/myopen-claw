@@ -14,7 +14,44 @@
       "channel": "whatsapp",
       "message_archetype": "context_open_question",
       "template_hint": "abertura curta com contexto real e pergunta unica",
-      "tags": ["abertura", "contexto", "pergunta"]
+      "tags": ["abertura", "contexto", "pergunta"],
+      "step_scripts": {
+        "step_1": "Oi {nome}, tudo bem? Vi seu contato no {fonte} como síndico profissional.",
+        "step_2": "Como você está gerenciando os condomínios hoje — tem algum sistema ou está no improviso?"
+      }
+    },
+    {
+      "stage": "lead",
+      "client_type": "condominio",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "human_direct_probe_3step",
+      "template_hint": "abordagem em 3 mensagens curtas para contato humano direto",
+      "tags": ["abertura", "curta", "3_passos", "contato_direto"],
+      "_protocol": "Protocolo 1 — 4 ações sequenciais (cada ação = 1 turno). Ver battlecards.protocolo_contato_direto.",
+      "step_scripts": {
+        "acao_1": "Oi {nome}, tudo bem? Vi seu contato no {fonte} como síndico profissional.",
+        "acao_2": "Legal! Hoje, para gerenciar os condomínios, você usa algum sistema específico ou faz pelo Excel?",
+        "acao_3": "Entendi! A Zind ajuda justamente a resolver, exclusiva para síndicos.",
+        "acao_4": "Faz sentido batermos um papo rápido de 10 min com nosso fundador para você dar uma olhada?"
+      }
+    },
+    {
+      "stage": "lead",
+      "client_type": "condominio",
+      "city": "*",
+      "region": "*",
+      "channel": "whatsapp",
+      "message_archetype": "bot_router_vendor_pitch",
+      "template_hint": "navegação de chatbot + abordagem ao gatekeeper",
+      "tags": ["bot", "portaria", "sindicatura", "gatekeeper"],
+      "_protocol": "Protocolo 2 — 2 etapas: bypass de menu + pergunta ao gatekeeper humano. Ver battlecards.gatekeeper.",
+      "step_scripts": {
+        "etapa_1_bypass": "Falar com atendente.",
+        "etapa_1_bypass_fallback": "Falar com humano.",
+        "etapa_2_gatekeeper": "Oi, tudo bem? Quem é a melhor pessoa da equipe para eu falar sobre um sistema de gestão exclusivo para síndicos?"
+      }
     },
     {
       "stage": "lead",
@@ -24,7 +61,11 @@
       "channel": "whatsapp",
       "message_archetype": "pain_mirror",
       "template_hint": "espelhar dor operacional sem pressao",
-      "tags": ["dor", "empatia", "descoberta"]
+      "tags": ["dor", "empatia", "descoberta"],
+      "step_scripts": {
+        "step_1": "Oi {nome}! Síndico profissional gerenciando vários condomínios ao mesmo tempo tem bastante coisa pra controlar, né?",
+        "step_2": "O que mais consome seu tempo hoje — financeiro, comunicação com moradores ou outra coisa?"
+      }
     },
     {
       "stage": "lead",
@@ -34,7 +75,10 @@
       "channel": "*",
       "message_archetype": "cross_channel_short",
       "template_hint": "mensagem curta resiliente a variacao de canal",
-      "tags": ["canal", "curta", "flexivel"]
+      "tags": ["canal", "curta", "flexivel"],
+      "step_scripts": {
+        "step_1": "Oi {nome}, tudo bem? Vi você como síndico profissional e queria entender como você gerencia seus condomínios hoje."
+      }
     },
     {
       "stage": "lead",
@@ -44,7 +88,10 @@
       "channel": "whatsapp",
       "message_archetype": "signal_trigger",
       "template_hint": "usar sinal recente + pergunta objetiva",
-      "tags": ["sinal", "gatilho", "resposta"]
+      "tags": ["sinal", "gatilho", "resposta"],
+      "step_scripts": {
+        "step_1": "Oi {nome}, vi que {sinal_recente}. Faz sentido conversarmos sobre como a Zind pode ajudar?"
+      }
     },
     {
       "stage": "qualificado",
@@ -54,7 +101,10 @@
       "channel": "whatsapp",
       "message_archetype": "impact_probe",
       "template_hint": "validar impacto atual e urgencia",
-      "tags": ["impacto", "prioridade", "dor"]
+      "tags": ["impacto", "prioridade", "dor"],
+      "step_scripts": {
+        "step_1": "Você mencionou {dor}. Quanto tempo por semana isso te toma hoje, aproximadamente?"
+      }
     },
     {
       "stage": "qualificado",
@@ -64,7 +114,10 @@
       "channel": "*",
       "message_archetype": "qualify_microdiagnostic",
       "template_hint": "microdiagnostico com uma pergunta por vez",
-      "tags": ["qualificacao", "microdiagnostico"]
+      "tags": ["qualificacao", "microdiagnostico"],
+      "step_scripts": {
+        "step_1": "Quantos condomínios você gerencia hoje?"
+      }
     },
     {
       "stage": "interesse",
@@ -74,7 +127,11 @@
       "channel": "whatsapp",
       "message_archetype": "next_step_invite",
       "template_hint": "beneficio concreto e convite para passo curto",
-      "tags": ["convite", "beneficio", "agenda"]
+      "tags": ["convite", "beneficio", "agenda"],
+      "step_scripts": {
+        "step_1": "Entendi! A Zind centraliza tudo — financeiro, comunicação e follow-up — num só lugar.",
+        "step_2": "Consigo te mostrar em 15 min como funciona na prática. Quando ficaria melhor pra você?"
+      }
     },
     {
       "stage": "interesse",
@@ -84,7 +141,11 @@
       "channel": "*",
       "message_archetype": "social_proof_soft",
       "template_hint": "prova leve + pergunta de disponibilidade",
-      "tags": ["prova", "agenda", "conversao"]
+      "tags": ["prova", "agenda", "conversao"],
+      "step_scripts": {
+        "step_1": "Síndicos que usam a Zind economizam em média 4h por semana em retrabalho administrativo.",
+        "step_2": "Faz sentido ver como funciona? Consigo 15 min com você essa semana."
+      }
     },
     {
       "stage": "proposta",
@@ -94,7 +155,11 @@
       "channel": "whatsapp",
       "message_archetype": "risk_reversal",
       "template_hint": "reduzir risco percebido e facilitar decisao",
-      "tags": ["risco", "decisao", "objeção"]
+      "tags": ["risco", "decisao", "objecao"],
+      "step_scripts": {
+        "step_1": "Entendo a dúvida. A gente começa simples — sem migração complexa e sem contrato longo.",
+        "step_2": "O que seria necessário pra você se sentir seguro pra dar o próximo passo?"
+      }
     },
     {
       "stage": "follow_up",
@@ -104,7 +169,10 @@
       "channel": "whatsapp",
       "message_archetype": "respectful_reactivation",
       "template_hint": "retomar com respeito ao tempo e pergunta binaria",
-      "tags": ["followup", "respeito", "reativacao"]
+      "tags": ["followup", "respeito", "reativacao"],
+      "step_scripts": {
+        "step_1": "Oi {nome}, passando pra ver se ainda faz sentido conversarmos sobre a Zind. Ainda é algo relevante pra você agora?"
+      }
     },
     {
       "stage": "lead",

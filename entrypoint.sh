@@ -4,6 +4,21 @@ set -euo pipefail
 chown -R root:root /app/extensions 2>/dev/null || true
 # docker.io + memclaw npm install movidos para o Dockerfile (build-time).
 
+# Garante python3-requests disponível para scripts de crons (skills que fazem HTTP)
+python3 -c "import requests" 2>/dev/null || apt-get install -qq -y python3-requests 2>/dev/null || true
+
+# Garante dependências do github-weekly-summary (openai, python-dotenv)
+python3 -c "import openai" 2>/dev/null || pip3 install openai --break-system-packages -q 2>/dev/null || true
+python3 -c "import dotenv" 2>/dev/null || apt-get install -qq -y python3-dotenv 2>/dev/null || true
+
+# Garante que o CLI docker está disponível para poder chamar os MCPs via docker exec
+if ! command -v docker &>/dev/null; then
+    echo ">>> [docker-cli] Instalando docker CLI..."
+    apt-get update -qq 2>/dev/null && apt-get install -qq -y docker.io 2>/dev/null || \
+    curl -fsSL https://get.docker.com | sh -s -- --quiet 2>/dev/null || true
+    echo ">>> [docker-cli] docker: $(docker --version 2>/dev/null || echo 'falhou')"
+fi
+
 cd /app 2>/dev/null || cd /workspace 2>/dev/null || cd "$(dirname "$0")"
 APP_ROOT=$(pwd)
 CONFIG_DIR="/root/.openclaw"
@@ -19,6 +34,13 @@ SKILLS_SYNC_HASH_FILE="$CONFIG_DIR/.skills_sync_version"
 OBSIDIAN_MCP_VERSION_DEFAULT="1.0.6"
 OBSIDIAN_MCP_VERSION_VALUE="${OBSIDIAN_MCP_VERSION:-$OBSIDIAN_MCP_VERSION_DEFAULT}"
 OPENCLAW_ONBOARD_MODE_VALUE="$(echo "${OPENCLAW_ONBOARD_MODE:-once}" | tr '[:upper:]' '[:lower:]')"
+OPENCLAW_FAST_START_VALUE="$(echo "${OPENCLAW_FAST_START:-false}" | tr '[:upper:]' '[:lower:]')"
+
+if [ "$OPENCLAW_FAST_START_VALUE" = "1" ] || [ "$OPENCLAW_FAST_START_VALUE" = "true" ] || [ "$OPENCLAW_FAST_START_VALUE" = "yes" ]; then
+    if [ "$OPENCLAW_ONBOARD_MODE_VALUE" = "always" ] || [ "$OPENCLAW_ONBOARD_MODE_VALUE" = "force" ]; then
+        OPENCLAW_ONBOARD_MODE_VALUE="once"
+    fi
+fi
 
 mkdir -p "$CONFIG_DIR" "$WORKSPACE_DIR" "$CONFIG_DIR/hooks"
 mkdir -p "$CONFIG_DIR/extensions"
@@ -30,7 +52,12 @@ find "$CONFIG_DIR/extensions" -type d -exec chmod 755 {} \; 2>/dev/null || true
 find "$CONFIG_DIR/extensions" -type f -exec chmod 644 {} \; 2>/dev/null || true
 
 sync_agent_workspaces() {
-    for agent in leads content intel ops researcher sales-sim sindico-sim sim-control; do
+    # Agentes que recebem o symlink completo de skills (precisam das 23 skills globais)
+    local FULL_SKILLS_AGENTS="leads content intel ops researcher sales-sim sindico-sim sim-control"
+    # Agentes Zind: recebem apenas skills/crm/library (sem SKILL.md → sem injeção dos 9k tokens de skills)
+    local ZIND_AGENTS="zind-crm-orchestrator zind-crm-cold-contact zind-crm-qualifier zind-crm-closer zind-crm-handover zind-crm-reviewer zind-crm-cold-contact-adm"
+
+    for agent in $FULL_SKILLS_AGENTS $ZIND_AGENTS; do
         local src="$APP_ROOT/agents/${agent}"
         local dst="$CONFIG_DIR/workspace-${agent}"
         [ -d "$src" ] || continue
@@ -38,7 +65,49 @@ sync_agent_workspaces() {
         for f in SOUL.md AGENTS.md IDENTITY.md TOOLS.md; do
             [ -f "$src/$f" ] && cp "$src/$f" "$dst/$f"
         done
+
+        if echo "$FULL_SKILLS_AGENTS" | grep -qw "$agent"; then
+            # Skill symlink completo para agentes gerais
+            if [ -d "$APP_ROOT/skills" ]; then
+                ln -sfn "$APP_ROOT/skills" "$dst/skills"
+            fi
+        else
+            # Zind agents: só a biblioteca CRM (sem SKILL.md → sem carga dos 9k tokens de skills)
+            rm -rf "$dst/skills"
+            mkdir -p "$dst/skills/crm"
+            if [ -d "$APP_ROOT/skills/crm/library" ]; then
+                ln -sfn "$APP_ROOT/skills/crm/library" "$dst/skills/crm/library"
+            fi
+        fi
     done
+
+    # Work agent workspace: 7 work-domain skills (per-skill symlinks, não symlink completo)
+    local WORK_DST="$CONFIG_DIR/workspace-work"
+    local WORK_SRC="$APP_ROOT/agents/work"
+    if [ -d "$WORK_SRC" ]; then
+        mkdir -p "$WORK_DST/skills"
+        for f in SOUL.md AGENTS.md IDENTITY.md TOOLS.md; do
+            [ -f "$WORK_SRC/$f" ] && cp "$WORK_SRC/$f" "$WORK_DST/$f"
+        done
+        for skill in github-weekly-summary edital_monitor business-monitor \
+                     politics_economy_monitor tech-news-digest crm sindico-leads; do
+            [ -d "$APP_ROOT/skills/$skill" ] && ln -sfn "$APP_ROOT/skills/$skill" "$WORK_DST/skills/$skill"
+        done
+    fi
+}
+
+filter_default_workspace_skills() {
+    # Remove skills fora do domínio pessoal do workspace default.
+    # Chamado após o sync externo de skills para sobrescrever qualquer repopulação.
+    local SKILLS_TO_REMOVE="github-weekly-summary edital_monitor business-monitor business_monitor
+        politics_economy_monitor tech-news-digest crm sindico-leads
+        daily-content-creator curadoria-temas-diarios trends
+        reddit-digest reddit_digest fetch-trending-topics
+        discord-sales-sim usell-sales-workflow"
+    for skill in $SKILLS_TO_REMOVE; do
+        rm -rf "$WORKSPACE_DIR/skills/$skill" 2>/dev/null || true
+    done
+    echo " >>> [skills] Default workspace filtrado: somente domínio pessoal."
 }
 
 sync_runtime_stack_assets() {
@@ -53,6 +122,10 @@ sync_runtime_stack_assets() {
     if [ -f "$SOURCE_WORKSPACE/configs/TOOLS.md" ]; then
         cp "$SOURCE_WORKSPACE/configs/TOOLS.md" "$WORKSPACE_DIR/configs/TOOLS.md"
     fi
+    # ROUTING.md: instruções mínimas de roteamento para o default agent
+    if [ -f "$SOURCE_WORKSPACE/configs/ROUTING.md" ]; then
+        cp "$SOURCE_WORKSPACE/configs/ROUTING.md" "$WORKSPACE_DIR/ROUTING.md"
+    fi
 
     if [ -f "$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs" ]; then
         cp "$SOURCE_WORKSPACE/scripts/apply-model-stack.mjs" "$WORKSPACE_DIR/scripts/apply-model-stack.mjs"
@@ -63,19 +136,28 @@ sync_versioned_cron_assets() {
     local source_cron_dir="$SOURCE_WORKSPACE/crons"
     local target_cron_dir="$WORKSPACE_DIR/crons"
 
-    if [ ! -d "$source_cron_dir" ]; then
-        return 0
-    fi
-
     mkdir -p "$target_cron_dir"
 
-    for source_file in "$source_cron_dir"/*.cron.md; do
-        [ -f "$source_file" ] || continue
-        local target_file="$target_cron_dir/$(basename "$source_file")"
-        if [ ! -f "$target_file" ] || ! cmp -s "$source_file" "$target_file"; then
-            cp "$source_file" "$target_file"
-        fi
-    done
+    if [ -d "$source_cron_dir" ]; then
+        for source_file in "$source_cron_dir"/*.cron.md; do
+            [ -f "$source_file" ] || continue
+            local target_file="$target_cron_dir/$(basename "$source_file")"
+            if [ ! -f "$target_file" ] || ! cmp -s "$source_file" "$target_file"; then
+                cp "$source_file" "$target_file"
+            fi
+        done
+    fi
+
+    # Sync crons versionados no repositório do projeto ($APP_ROOT/crons/)
+    if [ -d "$APP_ROOT/crons" ]; then
+        for source_file in "$APP_ROOT/crons"/*.cron.md; do
+            [ -f "$source_file" ] || continue
+            local target_file="$target_cron_dir/$(basename "$source_file")"
+            if [ ! -f "$target_file" ] || ! cmp -s "$source_file" "$target_file"; then
+                cp "$source_file" "$target_file"
+            fi
+        done
+    fi
 }
 
 apply_runtime_model_stack() {
@@ -146,8 +228,15 @@ init_obsidian_vault() {
     validate_obsidian_mcp_vault() {
         local target_dir="$1"
         local smoke_log="/tmp/obsidian-mcp-smoke.log"
+        local smoke_marker="$CONFIG_DIR/.obsidian_mcp_smoke_${OBSIDIAN_MCP_VERSION_VALUE}"
+        local smoke_always="$(echo "${OBSIDIAN_MCP_SMOKE_ALWAYS:-false}" | tr '[:upper:]' '[:lower:]')"
         local rc=0
         local smoke_timeout="${OBSIDIAN_MCP_SMOKE_TIMEOUT_SECONDS:-45}"
+
+        if [ "$smoke_always" != "1" ] && [ "$smoke_always" != "true" ] && [ "$smoke_always" != "yes" ] && [ -f "$smoke_marker" ]; then
+            echo " >>> [VAULT] Smoke test do $obsidian_mcp_pkg já validado para esta versão — pulando."
+            return 0
+        fi
 
         run_obsidian_smoke() {
             rc=0
@@ -190,6 +279,7 @@ init_obsidian_vault() {
             fi
         done
 
+        date -Iseconds > "$smoke_marker" 2>/dev/null || true
         echo " >>> [VAULT] Smoke test do $obsidian_mcp_pkg concluído com sucesso."
     }
 
@@ -347,6 +437,11 @@ if (config.models?.providers) {
  config.mcp.servers ??= {};
  delete config.mcp.servers["mcp-memories"];
  delete config.mcp.servers["memories"];
+ // Remover aliases legados para evitar duplicação de schemas de tool no prompt.
+ // Mantemos apenas os IDs canônicos: mcp-crm, mcp-shopping, mcp-trends, mcp-leads.
+ delete config.mcp.servers["crm"];
+ delete config.mcp.servers["shopping"];
+ delete config.mcp.servers["trends"];
  // Garantir que o MCP obsidian aponta para o vault correto (default: /vault).
  // (Algumas instalações antigas apontavam para ~/.openclaw/workspace e criavam um 4000-Inbox duplicado.)
  const obsidianExisting = config.mcp.servers.obsidian;
@@ -370,6 +465,18 @@ if (config.models?.providers) {
  config.mcp.servers["mcp-leads"] ??= {
    command: "docker",
    args: ["exec", "-i", "mcp-leads", "python3", "/app/main.py"],
+   type: "stdio",
+ };
+ // crm-proxy: proxy de 1 tool que encaminha para mcp-crm (reduz schema de 14k → 500 chars).
+ config.mcp.servers["crm-proxy"] = {
+   command: "docker",
+   args: ["exec", "-i", "mcp-crm", "python3", "/app/proxy.py"],
+   type: "stdio",
+ };
+ // leads-proxy: proxy de 1 tool que encaminha para mcp-leads (reduz schema/token por bundle).
+ config.mcp.servers["leads-proxy"] = {
+   command: "docker",
+   args: ["exec", "-i", "mcp-leads", "python3", "/app/proxy.py"],
    type: "stdio",
  };
 
@@ -434,23 +541,29 @@ const desiredAgents = [
     id: "default",
     default: true,
     workspace: "~/.openclaw/workspace",
-    subagents: { allowAgents: ["librarian"] },
+    tools: {
+      allow: ["sessions_send", "sessions_list", "sessions_spawn", "read", "web_search", "web_fetch", "browser", "shopping"],
+      deny: ["mcp-crm", "crm-proxy", "mcp-shopping", "mcp-leads", "leads-proxy", "mcp-trends", "obsidian", "write", "edit", "exec", "canvas"],
+    },
+    subagents: { allowAgents: ["librarian", "researcher", "zind-crm-orchestrator", "ops", "work"] },
   },
   {
     id: "leads",
     name: "Prospector",
     workspace: "~/.openclaw/workspace-leads",
     tools: {
-      allow: ["exec", "read", "cron", "sessions_list"],
-      deny: ["browser", "canvas", "write", "edit"],
+      deny: ["mcp-crm", "crm-proxy", "mcp-shopping", "mcp-trends", "obsidian", "browser", "canvas", "write", "edit", "web_search", "web_fetch"],
     },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    subagents: { allowAgents: [] },
   },
   {
     id: "content",
     name: "Copywriter",
     workspace: "~/.openclaw/workspace-content",
     tools: {
-      allow: ["exec", "read", "web_search", "web_fetch", "browser", "cron"],
+      allow: ["exec", "read", "web_search", "web_fetch", "browser"],
     },
   },
   {
@@ -458,7 +571,7 @@ const desiredAgents = [
     name: "Sentinel",
     workspace: "~/.openclaw/workspace-intel",
     tools: {
-      allow: ["exec", "read", "web_search", "web_fetch", "cron"],
+      allow: ["exec", "read", "web_search", "web_fetch"],
       deny: ["browser", "canvas"],
     },
   },
@@ -467,9 +580,20 @@ const desiredAgents = [
     name: "Steward",
     workspace: "~/.openclaw/workspace-ops",
     tools: {
-      allow: ["exec", "read", "cron"],
+      allow: ["exec", "read"],
       deny: ["browser", "canvas", "write", "edit"],
     },
+  },
+  {
+    id: "work",
+    name: "Strategist",
+    workspace: "~/.openclaw/workspace-work",
+    tools: {
+      allow: ["exec", "read", "web_search", "web_fetch"],
+      deny: ["browser", "canvas", "mcp-crm", "crm-proxy", "mcp-shopping",
+             "mcp-leads", "leads-proxy", "mcp-trends", "obsidian", "write", "edit"],
+    },
+    subagents: { allowAgents: [] },
   },
   {
     id: "usell",
@@ -478,9 +602,173 @@ const desiredAgents = [
     tools: { profile: "messaging" },
   },
   {
+    id: "sim-control",
+    name: "Sales Simulation Control",
+    workspace: "~/.openclaw/workspace-sim-control",
+    memorySearch: { enabled: false },
+    tools: {
+      allow: ["exec", "read"],
+      deny: [
+        "sessions_send",
+        "sessions_spawn",
+        "sessions_history",
+        "cron",
+        "browser",
+        "canvas",
+        "write",
+        "edit",
+      ],
+    },
+  },
+  {
+    id: "sales-sim",
+    name: "Sales Simulator",
+    workspace: "~/.openclaw/workspace-sales-sim",
+    memorySearch: { enabled: false },
+    tools: {
+      allow: ["read"],
+      deny: [
+        "sessions_send",
+        "sessions_spawn",
+        "sessions_history",
+        "exec",
+        "cron",
+        "browser",
+        "canvas",
+        "web_search",
+        "web_fetch",
+        "write",
+        "edit",
+        "mcp-crm",
+      ],
+    },
+  },
+  {
+    id: "sindico-sim",
+    name: "Sindico Simulator",
+    workspace: "~/.openclaw/workspace-sindico-sim",
+    memorySearch: { enabled: false },
+    tools: {
+      allow: ["read"],
+      deny: [
+        "sessions_send",
+        "sessions_spawn",
+        "sessions_history",
+        "exec",
+        "cron",
+        "browser",
+        "canvas",
+        "web_search",
+        "web_fetch",
+        "write",
+        "edit",
+        "mcp-crm",
+      ],
+    },
+  },
+  {
     id: "librarian",
     name: "Librarian",
     workspace: "/vault",
+  },
+  {
+    id: "zind-crm-orchestrator",
+    name: "Zind CRM Orchestrator",
+    workspace: "~/.openclaw/workspace-zind-crm-orchestrator",
+    memorySearch: { enabled: false },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    model: {
+      primary: "usage-router/zai/glm-4.7-flash",
+      fallbacks: ["usage-router/google/gemini-2.5-flash", "usage-router/mistral/mistral-large-latest"],
+    },
+    tools: {
+      allow: ["sessions_send", "sessions_list", "read", "crm-proxy"],
+      deny: ["mcp-crm", "write", "edit", "exec", "cron", "browser", "web_search", "web_fetch", "canvas", "sessions_spawn"],
+    },
+    subagents: {
+      allowAgents: ["zind-crm-cold-contact", "zind-crm-qualifier", "zind-crm-closer", "zind-crm-handover", "zind-crm-reviewer"],
+    },
+  },
+  {
+    id: "zind-crm-cold-contact",
+    name: "Zind Cold Contact",
+    workspace: "~/.openclaw/workspace-zind-crm-cold-contact",
+    memorySearch: { enabled: false },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    model: {
+      primary: "usage-router/zai/glm-4.7-flash",
+      fallbacks: ["usage-router/google/gemini-2.5-flash", "usage-router/mistral/mistral-large-latest"],
+    },
+    tools: {
+      allow: ["read", "crm-proxy"],
+      deny: ["mcp-crm", "sessions_send", "sessions_spawn", "sessions_history", "write", "edit", "exec", "cron", "browser", "web_search", "web_fetch", "canvas"],
+    },
+  },
+  {
+    id: "zind-crm-qualifier",
+    name: "Zind Qualifier",
+    workspace: "~/.openclaw/workspace-zind-crm-qualifier",
+    memorySearch: { enabled: false },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    model: {
+      primary: "usage-router/zai/glm-4.7-flash",
+      fallbacks: ["usage-router/google/gemini-2.5-flash", "usage-router/mistral/mistral-large-latest"],
+    },
+    tools: {
+      allow: ["read", "crm-proxy"],
+      deny: ["mcp-crm", "sessions_send", "sessions_spawn", "sessions_history", "write", "edit", "exec", "cron", "browser", "web_search", "web_fetch", "canvas"],
+    },
+  },
+  {
+    id: "zind-crm-closer",
+    name: "Zind Closer",
+    workspace: "~/.openclaw/workspace-zind-crm-closer",
+    memorySearch: { enabled: false },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    model: {
+      primary: "usage-router/zai/glm-4.7-flash",
+      fallbacks: ["usage-router/google/gemini-2.5-flash", "usage-router/mistral/mistral-large-latest"],
+    },
+    tools: {
+      allow: ["read", "crm-proxy"],
+      deny: ["mcp-crm", "sessions_send", "sessions_spawn", "sessions_history", "write", "edit", "exec", "cron", "browser", "web_search", "web_fetch", "canvas"],
+    },
+  },
+  {
+    id: "zind-crm-handover",
+    name: "Zind Handover",
+    workspace: "~/.openclaw/workspace-zind-crm-handover",
+    memorySearch: { enabled: false },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    model: {
+      primary: "usage-router/zai/glm-4.7-flash",
+      fallbacks: ["usage-router/google/gemini-2.5-flash", "usage-router/mistral/mistral-large-latest"],
+    },
+    tools: {
+      allow: ["read", "crm-proxy"],
+      deny: ["mcp-crm", "sessions_send", "sessions_spawn", "sessions_history", "write", "edit", "exec", "cron", "browser", "web_search", "web_fetch", "canvas"],
+    },
+  },
+  {
+    id: "zind-crm-reviewer",
+    name: "Zind Reviewer",
+    workspace: "~/.openclaw/workspace-zind-crm-reviewer",
+    memorySearch: { enabled: false },
+    skills: [],
+    skillsLimits: { maxSkillsPromptChars: 0 },
+    model: {
+      primary: "usage-router/zai/glm-4.7-flash",
+      fallbacks: ["usage-router/google/gemini-2.5-flash", "usage-router/mistral/mistral-large-latest"],
+    },
+    tools: {
+      allow: ["read", "crm-proxy", "sessions_list"],
+      deny: ["mcp-crm", "sessions_send", "sessions_spawn", "sessions_history", "write", "edit", "exec", "cron", "browser", "web_search", "web_fetch", "canvas"],
+    },
   },
 ];
 const existingAgents = Array.isArray(config.agents.list) ? config.agents.list : [];
@@ -562,11 +850,13 @@ if (process.env.TAVILY_API_KEY) {
 
 config.channels ??= {};
 if (String(process.env.DISCORD_BOT_TOKEN || "").trim()) {
+  const discordToken = String(process.env.DISCORD_BOT_TOKEN || "").trim();
   const discordGuildId = String(process.env.DISCORD_GUILD_ID || "").trim();
   const discordChannelId = String(process.env.DISCORD_ZIND_CONTENT_CHANNEL_ID || process.env.DISCORD_CHANNEL_ID || "").trim();
+  const discordSalesSimChannelId = String(process.env.DISCORD_SALES_SIM_CHANNEL_ID || "").trim();
   config.channels.discord ??= {};
   config.channels.discord.enabled = true;
-  config.channels.discord.token = { source: "env", provider: "default", id: "DISCORD_BOT_TOKEN" };
+  config.channels.discord.token = discordToken;
   config.channels.discord.allowFrom = ["*"];
   config.channels.discord.dmPolicy = "open";
   config.channels.discord.groupPolicy ??= "open";
@@ -588,6 +878,15 @@ if (String(process.env.DISCORD_BOT_TOKEN || "").trim()) {
       channelEntry.requireMention = false;
       guildEntry.channels[discordChannelId] = channelEntry;
     }
+    if (discordSalesSimChannelId) {
+      guildEntry.channels ??= {};
+      const simChannelEntry =
+        typeof guildEntry.channels[discordSalesSimChannelId] === "object" && guildEntry.channels[discordSalesSimChannelId]
+          ? guildEntry.channels[discordSalesSimChannelId]
+          : {};
+      simChannelEntry.requireMention = false;
+      guildEntry.channels[discordSalesSimChannelId] = simChannelEntry;
+    }
 
     config.channels.discord.guilds[discordGuildId] = guildEntry;
   }
@@ -603,6 +902,37 @@ if (config.channels?.discord?.guilds && typeof config.channels.discord.guilds ==
       }
     }
   }
+}
+
+const discordSalesSimChannelId = String(process.env.DISCORD_SALES_SIM_CHANNEL_ID || "").trim();
+config.bindings = Array.isArray(config.bindings) ? config.bindings : [];
+config.bindings = config.bindings.filter((binding) => {
+  if (!binding || typeof binding !== "object") return false;
+  if (binding.agentId === "sim-control" && binding.match?.channel === "discord") return false;
+  if (binding.agentId === "zind-crm-orchestrator") return false;
+  return true;
+});
+const zindWhatsappAccountId = String(process.env.ZIND_WHATSAPP_ACCOUNT_ID || "").trim();
+if (zindWhatsappAccountId) {
+  config.bindings.unshift({
+    agentId: "zind-crm-orchestrator",
+    match: {
+      channel: "whatsapp",
+      accountId: zindWhatsappAccountId,
+    },
+  });
+}
+if (discordSalesSimChannelId) {
+  config.bindings.push({
+    agentId: "sim-control",
+    match: {
+      channel: "discord",
+      peer: {
+        kind: "group",
+        id: discordSalesSimChannelId,
+      },
+    },
+  });
 }
 
 config.gateway ??= {};
@@ -657,7 +987,9 @@ CURRENT_HASH="$(
 )"
 
 USER_VERSION="$(
-    grep '^versão:' "$SOURCE_WORKSPACE/configs/USER.md" 2>/dev/null | awk -F: '{print $2}' | xargs
+    {
+        grep -E '^(versão|versao|version):' "$SOURCE_WORKSPACE/configs/USER.md" 2>/dev/null || true
+    } | head -1 | awk -F: '{print $2}' | xargs
 )"
 PREV_USER_VERSION=""
 if [ -f "$USER_VERSION_FILE" ]; then
@@ -925,8 +1257,6 @@ if [ "$NEEDS_ONBOARDING" = "1" ]; then
 
     if [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
         echo " >>> [ETAPA 3.1/5] Conectando Discord..."
-        node "$APP_ROOT/dist/index.js" config set channels.discord.token \
-            --ref-provider default --ref-source env --ref-id DISCORD_BOT_TOKEN
         node "$APP_ROOT/dist/index.js" config set channels.discord.enabled true --strict-json
         node "$APP_ROOT/dist/index.js" config set channels.discord.allowFrom '["*"]' --strict-json
         node "$APP_ROOT/dist/index.js" config set channels.discord.dmPolicy '"open"' --strict-json
@@ -967,17 +1297,22 @@ if [ "$NEEDS_ONBOARDING" = "1" ]; then
             node "$APP_ROOT/dist/index.js" skills install "$skill" --force || echo "  ! Skill $skill pulada."
         done
     fi
+    echo " >>> [POST-ONBOARD] Reconciliando configuracao para remover aliases e reduzir injeção desnecessária..."
+    reconcile_openclaw_config
     echo " >>> Setup concluido!"
 fi
 
 SKILLS_REPO_DIR="$WORKSPACE_DIR/skills_repo"
 SKILLS_TARGET_DIR="$WORKSPACE_DIR/skills"
+SKILLS_SYNC_ON_BOOT_VALUE="$(echo "${SKILLS_SYNC_ON_BOOT:-true}" | tr '[:upper:]' '[:lower:]')"
 
 echo " >>> DEBUG: A URL recebida e: '${SKILLS_GIT_REPO:-}'"
 mkdir -p "$SKILLS_REPO_DIR"
 mkdir -p "$SKILLS_TARGET_DIR"
 
-if [ -n "${SKILLS_GIT_REPO:-}" ]; then
+if [ "$SKILLS_SYNC_ON_BOOT_VALUE" = "0" ] || [ "$SKILLS_SYNC_ON_BOOT_VALUE" = "false" ] || [ "$SKILLS_SYNC_ON_BOOT_VALUE" = "no" ]; then
+    echo " >>> SKILLS_SYNC_ON_BOOT=${SKILLS_SYNC_ON_BOOT_VALUE}; pulando sincronizacao de skills no boot."
+elif [ -n "${SKILLS_GIT_REPO:-}" ]; then
     # Compute remote HEAD hash without a full fetch
     REMOTE_SKILLS_HASH="$(git ls-remote "$SKILLS_GIT_REPO" refs/heads/main 2>/dev/null | awk '{print $1}')"
     PREV_SKILLS_HASH=""
@@ -1013,6 +1348,8 @@ else
     echo " >>> SKILLS_GIT_REPO vazio; pulando sincronizacao externa."
 fi
 
+filter_default_workspace_skills
+
 wait_for_gateway() {
     local attempt=1
     local max_attempts="${1:-30}"
@@ -1036,16 +1373,6 @@ register_versioned_crons() {
     current_cron_hash="$(
         find "$cron_dir" -name "*.cron.md" -type f 2>/dev/null -exec cat {} + | sha256sum | awk '{print $1}'
     )"
-
-    local prev_cron_hash=""
-    if [ -f "$CRON_HASH_FILE" ]; then
-        prev_cron_hash=$(cat "$CRON_HASH_FILE")
-    fi
-
-    if [ "$current_cron_hash" = "$prev_cron_hash" ]; then
-        echo " >>> Cronjobs sem alteracao, pulando registro."
-        return 0
-    fi
 
     echo " >>> Registrando cronjobs versionados..."
     mkdir -p "$cron_hash_dir"
@@ -1126,7 +1453,11 @@ PY
         local cron_id
         cron_id=$(basename "$cron_file" .cron.md)
         local cron_name
-        cron_name=$(tr -d '\r' < "$cron_file" | grep -o -- '--name "[^"]*"' | head -1 | sed 's/--name "//;s/"$//')
+        cron_name="$(
+            tr -d '\r' < "$cron_file" | {
+                grep -o -- '--name "[^"]*"' || true
+            } | head -1 | sed 's/--name "//;s/"$//'
+        )"
         local cron_command
         local cron_file_hash
         local cron_hash_file
@@ -1162,18 +1493,6 @@ PY
             fi
         fi
 
-        if [ -n "$existing_job_id" ] && [ -z "$prev_cron_file_hash" ] && [ "$recreate_for_agent_mismatch" -eq 0 ]; then
-            case "$cron_id" in
-                obsidian_git_push|obsidian_git_pull)
-                    ;;
-                *)
-                    echo "  > Cronjob '$cron_name' ja existente (migração inicial), registrando hash local e pulando."
-                    echo "$cron_file_hash" > "$cron_hash_file"
-                    continue
-                    ;;
-            esac
-        fi
-
         if [ -n "$existing_job_id" ] && [ "$cron_file_hash" = "$prev_cron_file_hash" ] && [ "$recreate_for_agent_mismatch" -eq 0 ]; then
             echo "  > Cronjob '$cron_name' sem alteracao, pulando."
             continue
@@ -1183,7 +1502,7 @@ PY
             echo "  > Cronjob '$cron_name' alterado, recriando..."
             while IFS='|' read -r stale_job_id _; do
                 [ -n "$stale_job_id" ] || continue
-                if ! openclaw cron remove "$stale_job_id" >/dev/null 2>&1; then
+                if ! OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1 openclaw cron remove "$stale_job_id" >/dev/null 2>&1; then
                     echo "  ! Falha ao remover cronjob '$cron_name' (id: $stale_job_id); tentando registrar mesmo assim."
                 fi
             done <<<"$existing_job_entries"
@@ -1201,7 +1520,7 @@ print(re.sub(r"--message \"([^\"]*)\"", lambda m: f"--message \"{marker}{m.group
                 "$cron_name" <<<"$cron_command"
             )"
         fi
-        if ! printf '%s\n' "$cron_command" | sh; then
+        if ! printf '%s\n' "$cron_command" | OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1 sh; then
             echo "  ! Erro ao registrar cronjob $cron_id."
             continue
         fi
@@ -1264,6 +1583,14 @@ if wait_for_gateway 45; then
     register_versioned_crons
 else
     echo " !!! Gateway nao ficou pronto a tempo; pulando registro de cronjobs."
+fi
+
+# Monitor de erros — envia alertas no Discord quando detecta falhas nos containers
+if [ -f "$SOURCE_WORKSPACE/scripts/error_monitor.py" ] && [ -n "${DISCORD_ERROR_WEBHOOK_URL:-}" ]; then
+    echo " >>> Iniciando error_monitor (alertas Discord via webhook)..."
+    python3 "$SOURCE_WORKSPACE/scripts/error_monitor.py" > /tmp/error_monitor.log 2>&1 &
+else
+    echo " >>> error_monitor desativado (DISCORD_ALERT_CHANNEL_ID não configurado ou script ausente)."
 fi
 
 wait "$GATEWAY_PID"
